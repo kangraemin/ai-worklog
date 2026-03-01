@@ -4,16 +4,12 @@
 
 set -euo pipefail
 
-# .env 탐색: AI_WORKLOG_DIR/.env → ~/.claude/.env fallback
-if [ -n "${AI_WORKLOG_DIR:-}" ] && [ -f "$AI_WORKLOG_DIR/.env" ]; then
-  ENV_FILE="$AI_WORKLOG_DIR/.env"
-else
-  ENV_FILE="$HOME/.claude/.env"
+# .env 탐색: ~/.claude/.env 먼저, AI_WORKLOG_DIR/.env로 덮어쓰기 (cascade)
+if [ -f "$HOME/.claude/.env" ]; then
+  set -a; source "$HOME/.claude/.env"; set +a
 fi
-if [ -f "$ENV_FILE" ]; then
-  set -a
-  source "$ENV_FILE"
-  set +a
+if [ -n "${AI_WORKLOG_DIR:-}" ] && [ "$AI_WORKLOG_DIR" != "$HOME/.claude" ] && [ -f "$AI_WORKLOG_DIR/.env" ]; then
+  set -a; source "$AI_WORKLOG_DIR/.env"; set +a
 fi
 
 TITLE="${1:?title required}"
