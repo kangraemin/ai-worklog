@@ -135,11 +135,15 @@ remove_file() {
 remove_file "$TARGET_DIR/scripts/notion-worklog.sh"
 remove_file "$TARGET_DIR/scripts/notion-migrate-worklogs.sh"
 remove_file "$TARGET_DIR/scripts/duration.py"
+remove_file "$TARGET_DIR/scripts/update-check.sh"
 remove_file "$TARGET_DIR/hooks/worklog.sh"
 remove_file "$TARGET_DIR/hooks/session-end.sh"
 remove_file "$TARGET_DIR/commands/worklog.md"
 remove_file "$TARGET_DIR/commands/migrate-worklogs.md"
+remove_file "$TARGET_DIR/commands/update-worklog.md"
 remove_file "$TARGET_DIR/rules/worklog-rules.md"
+remove_file "$TARGET_DIR/.version"
+remove_file "$TARGET_DIR/.version-checked"
 
 # 빈 디렉토리 정리
 for dir in scripts hooks commands rules; do

@@ -342,6 +342,7 @@ PYEOF
 copy_file "$PACKAGE_DIR/scripts/notion-worklog.sh"          "$TARGET_DIR/scripts/notion-worklog.sh"
 copy_file "$PACKAGE_DIR/scripts/notion-migrate-worklogs.sh" "$TARGET_DIR/scripts/notion-migrate-worklogs.sh"
 copy_file "$PACKAGE_DIR/scripts/duration.py"                "$TARGET_DIR/scripts/duration.py"
+copy_file "$PACKAGE_DIR/scripts/update-check.sh"            "$TARGET_DIR/scripts/update-check.sh"
 
 # hooks (관리 블록만 교체)
 install_file "$PACKAGE_DIR/hooks/worklog.sh"     "$TARGET_DIR/hooks/worklog.sh"
@@ -350,6 +351,7 @@ install_file "$PACKAGE_DIR/hooks/session-end.sh" "$TARGET_DIR/hooks/session-end.
 # commands (항상 덮어쓰기)
 copy_file "$PACKAGE_DIR/commands/worklog.md"          "$TARGET_DIR/commands/worklog.md"
 copy_file "$PACKAGE_DIR/commands/migrate-worklogs.md" "$TARGET_DIR/commands/migrate-worklogs.md"
+copy_file "$PACKAGE_DIR/commands/update-worklog.md"   "$TARGET_DIR/commands/update-worklog.md"
 
 # rules (항상 덮어쓰기)
 copy_file "$PACKAGE_DIR/rules/worklog-rules.md" "$TARGET_DIR/rules/worklog-rules.md"
@@ -357,8 +359,14 @@ copy_file "$PACKAGE_DIR/rules/worklog-rules.md" "$TARGET_DIR/rules/worklog-rules
 # 실행 권한
 chmod +x "$TARGET_DIR/scripts/notion-worklog.sh"
 chmod +x "$TARGET_DIR/scripts/notion-migrate-worklogs.sh"
+chmod +x "$TARGET_DIR/scripts/update-check.sh"
 chmod +x "$TARGET_DIR/hooks/worklog.sh"
 chmod +x "$TARGET_DIR/hooks/session-end.sh"
+
+# ── 버전 SHA 저장 ─────────────────────────────────────────────────────────────
+INSTALLED_SHA=$(git -C "$PACKAGE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+echo "$INSTALLED_SHA" > "$TARGET_DIR/.version"
+ok "$(t '버전 기록' 'Version recorded'): $INSTALLED_SHA"
 
 # ── .env 설정 ────────────────────────────────────────────────────────────────
 if [ -n "$NOTION_TOKEN" ]; then
