@@ -106,36 +106,68 @@ NOTION_DB_ID=""
 if [ "$WORKLOG_DEST" != "git" ]; then
   header "Notion 설정"
 
-  info "Notion Integration 토큰이 필요합니다."
-  info "https://www.notion.so/my-integrations 에서 생성하세요."
-  echo ""
-  echo -n "NOTION_TOKEN (빈 값이면 나중에 설정): "
-  read -r NOTION_TOKEN
+  # 기존 토큰 탐색
+  NOTION_TOKEN="${NOTION_TOKEN:-}"
+  if [ -z "$NOTION_TOKEN" ] && [ -f "$TARGET_DIR/.env" ]; then
+    NOTION_TOKEN=$(grep "^NOTION_TOKEN=" "$TARGET_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+  fi
+  if [ -z "$NOTION_TOKEN" ] && [ -f "$HOME/.claude/.env" ]; then
+    NOTION_TOKEN=$(grep "^NOTION_TOKEN=" "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+  fi
+
+  if [ -n "$NOTION_TOKEN" ]; then
+    ok "기존 NOTION_TOKEN 발견 — 재사용합니다."
+  else
+    info "Notion Integration 토큰이 필요합니다."
+    info "https://www.notion.so/my-integrations 에서 생성하세요."
+    echo ""
+    echo -n "NOTION_TOKEN (빈 값이면 나중에 설정): "
+    read -r NOTION_TOKEN
+  fi
 
   if [ -n "$NOTION_TOKEN" ]; then
     ok "토큰 입력 완료"
 
-    # DB 자동 생성
-    echo ""
-    info "워크로그 DB를 생성할 Notion 페이지 URL 또는 ID를 입력하세요."
-    info "예: https://notion.so/My-Page-abc123def456"
-    echo ""
-    echo -n "부모 페이지 URL/ID: "
-    read -r PARENT_INPUT
+    # 기존 NOTION_DB_ID 탐색
+    if [ -z "$NOTION_DB_ID" ]; then
+      NOTION_DB_ID=$(python3 -c "
+import json, os
+for path in ['$TARGET_DIR/settings.json', os.path.expanduser('~/.claude/settings.json')]:
+    try:
+        with open(path) as f:
+            cfg = json.load(f)
+        db_id = cfg.get('env', {}).get('NOTION_DB_ID', '')
+        if db_id:
+            print(db_id)
+            break
+    except:
+        pass
+" 2>/dev/null || true)
+    fi
 
-    # URL에서 page_id 추출
-    PARENT_ID=$(echo "$PARENT_INPUT" | python3 -c "
+    if [ -n "$NOTION_DB_ID" ]; then
+      ok "기존 NOTION_DB_ID 발견 — 재사용합니다: $NOTION_DB_ID"
+    else
+      # DB 자동 생성
+      echo ""
+      info "워크로그 DB를 생성할 Notion 페이지 URL 또는 ID를 입력하세요."
+      info "예: https://notion.so/My-Page-abc123def456"
+      echo ""
+      echo -n "부모 페이지 URL/ID: "
+      read -r PARENT_INPUT
+
+      # URL에서 page_id 추출
+      PARENT_ID=$(echo "$PARENT_INPUT" | python3 -c "
 import sys, re
 raw = sys.stdin.read().strip()
-# URL 형식: https://notion.so/xxx-<32hex> 또는 순수 ID
 m = re.search(r'([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', raw)
 print(m.group(1) if m else raw)
 ")
 
-    if [ -n "$PARENT_ID" ]; then
-      info "DB 생성 중..."
+      if [ -n "$PARENT_ID" ]; then
+        info "DB 생성 중..."
 
-      DB_PAYLOAD=$(python3 -c "
+        DB_PAYLOAD=$(python3 -c "
 import json
 data = {
     'parent': {'type': 'page_id', 'page_id': '$PARENT_ID'},
@@ -159,33 +191,33 @@ data = {
 print(json.dumps(data))
 ")
 
-      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.notion.com/v1/databases" \
-        -H "Authorization: Bearer $NOTION_TOKEN" \
-        -H "Notion-Version: 2022-06-28" \
-        -H "Content-Type: application/json" \
-        -d "$DB_PAYLOAD")
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.notion.com/v1/databases" \
+          -H "Authorization: Bearer $NOTION_TOKEN" \
+          -H "Notion-Version: 2022-06-28" \
+          -H "Content-Type: application/json" \
+          -d "$DB_PAYLOAD")
 
-      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-      BODY=$(echo "$RESPONSE" | sed '$d')
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
 
-      if [ "$HTTP_CODE" = "200" ]; then
-        NOTION_DB_ID=$(echo "$BODY" | jq -r '.id')
-        ok "DB 생성 완료: $NOTION_DB_ID"
-      else
-        err "DB 생성 실패 (HTTP $HTTP_CODE)"
-        echo "$BODY" | jq -r '.message // .' 2>/dev/null || echo "$BODY"
-        echo ""
-        echo -n "기존 NOTION_DB_ID를 직접 입력하시겠습니까? (빈 값이면 스킵): "
-        read -r NOTION_DB_ID
+        if [ "$HTTP_CODE" = "200" ]; then
+          NOTION_DB_ID=$(echo "$BODY" | jq -r '.id')
+          ok "DB 생성 완료: $NOTION_DB_ID"
+        else
+          err "DB 생성 실패 (HTTP $HTTP_CODE)"
+          echo "$BODY" | jq -r '.message // .' 2>/dev/null || echo "$BODY"
+          echo ""
+          echo -n "기존 NOTION_DB_ID를 직접 입력하시겠습니까? (빈 값이면 스킵): "
+          read -r NOTION_DB_ID
+        fi
       fi
     fi
   else
-    warn "Notion 토큰 없이 계속합니다. 나중에 install.sh --reconfigure로 설정 가능합니다."
-    if [ "$WORKLOG_DEST" = "notion-only" ]; then
-      warn "notion-only 모드지만 토큰이 없어 git 모드로 전환합니다."
-      WORKLOG_DEST="git"
-      WORKLOG_GIT_TRACK="true"
-    fi
+    warn "Notion 토큰 없이 계속합니다."
+    info "나중에 다음 파일에 NOTION_TOKEN=<값> 을 추가하세요:"
+    info "  1) $TARGET_DIR/.env"
+    info "  2) $HOME/.claude/.env"
+    info "/worklog 실행 시 위 순서로 자동 탐색합니다."
   fi
 fi
 
@@ -227,11 +259,11 @@ esac
 # ── 파일 복사 ────────────────────────────────────────────────────────────────
 header "파일 설치"
 
+# 스크립트/문서: 항상 덮어쓰기 (패키지 관리 파일, 사용자 수정 X)
 copy_file() {
   local src="$1" dst="$2"
   mkdir -p "$(dirname "$dst")"
   if [ -f "$dst" ]; then
-    # 백업
     cp "$dst" "${dst}.bak"
     warn "기존 파일 백업: ${dst}.bak"
   fi
@@ -239,21 +271,78 @@ copy_file() {
   ok "$(basename "$dst")"
 }
 
-# scripts
-copy_file "$PACKAGE_DIR/scripts/notion-worklog.sh"        "$TARGET_DIR/scripts/notion-worklog.sh"
+# 훅: 관리 블록(# --- ai-worklog start/end ---)만 교체, 나머지 보존
+install_file() {
+  local src="$1" dst="$2"
+  local START="# --- ai-worklog start ---"
+  local END="# --- ai-worklog end ---"
+
+  mkdir -p "$(dirname "$dst")"
+
+  if [ ! -f "$dst" ]; then
+    cp "$src" "$dst"
+    ok "$(basename "$dst") (새로 설치)"
+    return
+  fi
+
+  python3 - "$src" "$dst" "$START" "$END" <<'PYEOF'
+import sys
+
+src_path     = sys.argv[1]
+dst_path     = sys.argv[2]
+start_marker = sys.argv[3]
+end_marker   = sys.argv[4]
+
+src = open(src_path, encoding='utf-8').read()
+dst = open(dst_path, encoding='utf-8').read()
+
+s_start = src.find(start_marker)
+s_end   = src.find(end_marker)
+
+if s_start == -1 or s_end == -1:
+    # 소스에 관리 블록 없으면 전체 교체
+    open(dst_path, 'w', encoding='utf-8').write(src)
+    sys.exit(0)
+
+managed_block = src[s_start : s_end + len(end_marker)]
+
+d_start = dst.find(start_marker)
+d_end   = dst.find(end_marker)
+
+if d_start != -1 and d_end != -1:
+    # 기존 관리 블록 교체
+    new_dst = dst[:d_start] + managed_block + dst[d_end + len(end_marker):]
+else:
+    # 관리 블록 없음: exit 0 앞에 삽입 (exit 0이 있으면 append해도 실행 안 됨)
+    import re
+    exit_match = re.search(r'^exit\s+0\s*$', dst, re.MULTILINE)
+    if exit_match:
+        pos = exit_match.start()
+        new_dst = dst[:pos] + managed_block + '\n\n' + dst[pos:]
+    else:
+        new_dst = dst.rstrip('\n') + '\n\n' + managed_block + '\n'
+
+open(dst_path, 'w', encoding='utf-8').write(new_dst)
+PYEOF
+
+  ok "$(basename "$dst") (관리 블록 업데이트)"
+}
+
+# scripts (항상 덮어쓰기)
+copy_file "$PACKAGE_DIR/scripts/notion-worklog.sh"          "$TARGET_DIR/scripts/notion-worklog.sh"
 copy_file "$PACKAGE_DIR/scripts/notion-migrate-worklogs.sh" "$TARGET_DIR/scripts/notion-migrate-worklogs.sh"
-copy_file "$PACKAGE_DIR/scripts/duration.py"               "$TARGET_DIR/scripts/duration.py"
+copy_file "$PACKAGE_DIR/scripts/duration.py"                "$TARGET_DIR/scripts/duration.py"
 
-# hooks
-copy_file "$PACKAGE_DIR/hooks/worklog.sh"     "$TARGET_DIR/hooks/worklog.sh"
-copy_file "$PACKAGE_DIR/hooks/session-end.sh" "$TARGET_DIR/hooks/session-end.sh"
-copy_file "$PACKAGE_DIR/hooks/stop.sh"        "$TARGET_DIR/hooks/stop.sh"
+# hooks (관리 블록만 교체)
+install_file "$PACKAGE_DIR/hooks/worklog.sh"     "$TARGET_DIR/hooks/worklog.sh"
+install_file "$PACKAGE_DIR/hooks/session-end.sh" "$TARGET_DIR/hooks/session-end.sh"
+install_file "$PACKAGE_DIR/hooks/stop.sh"        "$TARGET_DIR/hooks/stop.sh"
 
-# commands
+# commands (항상 덮어쓰기)
 copy_file "$PACKAGE_DIR/commands/worklog.md"          "$TARGET_DIR/commands/worklog.md"
 copy_file "$PACKAGE_DIR/commands/migrate-worklogs.md" "$TARGET_DIR/commands/migrate-worklogs.md"
 
-# rules
+# rules (항상 덮어쓰기)
 copy_file "$PACKAGE_DIR/rules/worklog-rules.md" "$TARGET_DIR/rules/worklog-rules.md"
 
 # 실행 권한
