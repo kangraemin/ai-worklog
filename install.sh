@@ -572,7 +572,9 @@ header "$(t '설치 완료' 'Installation Complete')"
 echo -e "  ${BOLD}$(t '설정 요약' 'Summary')${NC}"
 echo "  ├─ $(t '범위' 'Scope'):     $SCOPE ($TARGET_DIR)"
 echo "  ├─ $(t '저장' 'Storage'):   $WORKLOG_DEST"
+if [ "$WORKLOG_DEST" != "notion-only" ]; then
 echo "  ├─ $(t 'git 추적' 'Git track'): $WORKLOG_GIT_TRACK"
+fi
 echo "  ├─ $(t '시점' 'Timing'):    $WORKLOG_TIMING"
 echo "  ├─ $(t '언어' 'Language'):  $WORKLOG_LANG"
 if [ -n "$NOTION_DB_ID" ]; then
