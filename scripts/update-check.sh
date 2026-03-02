@@ -13,6 +13,8 @@ API_URL="https://api.github.com/repos/$REPO/commits/main"
 AI_WORKLOG_DIR="${AI_WORKLOG_DIR:-$HOME/.claude}"
 VERSION_FILE="$AI_WORKLOG_DIR/.version"
 CHECKED_FILE="$AI_WORKLOG_DIR/.version-checked"
+FILES_VERSION="2"  # FILES 배열 변경 시 bump → 기존 유저도 전체 재다운로드
+FILES_VERSION_FILE="$AI_WORKLOG_DIR/.files-version"
 
 FORCE=false
 CHECK_ONLY=false
@@ -22,6 +24,12 @@ for arg in "$@"; do
     --check-only) CHECK_ONLY=true ;;
   esac
 done
+
+# FILES 배열 변경 감지 → 기존 유저도 전체 재다운로드
+INSTALLED_FILES_VERSION=$(cat "$FILES_VERSION_FILE" 2>/dev/null || echo "0")
+if [ "$FILES_VERSION" != "$INSTALLED_FILES_VERSION" ]; then
+  FORCE=true
+fi
 
 # ── 24시간 throttle ───────────────────────────────────────────────────────────
 if [ "$FORCE" = false ] && [ -f "$CHECKED_FILE" ]; then
@@ -63,8 +71,8 @@ if [ "$CHECK_ONLY" = true ]; then
   exit 0
 fi
 
-# ── 업데이트 필요 없으면 종료 ────────────────────────────────────────────────
-if [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
+# ── 업데이트 필요 없으면 종료 (--force 시 건너뜀) ─────────────────────────────
+if [ "$FORCE" = false ] && [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
   exit 0
 fi
 
@@ -128,5 +136,6 @@ fi
 
 # ── 버전 파일 갱신 ───────────────────────────────────────────────────────────
 echo "$LATEST_SHA" > "$VERSION_FILE"
+echo "$FILES_VERSION" > "$FILES_VERSION_FILE"
 
 echo "worklog-for-claude $INSTALLED_SHA → $LATEST_SHA 업데이트 완료"
