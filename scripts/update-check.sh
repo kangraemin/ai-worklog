@@ -68,6 +68,23 @@ if [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
   exit 0
 fi
 
+# ── 자기 자신 먼저 업데이트 (bootstrap) ────────────────────────────────────────
+SELF="scripts/update-check.sh"
+SELF_DST="$AI_WORKLOG_DIR/$SELF"
+if [ -f "$SELF_DST" ]; then
+  SELF_TMP=$(mktemp)
+  if curl -sf --max-time 10 "$RAW_BASE/$SELF" -o "$SELF_TMP" 2>/dev/null; then
+    if ! cmp -s "$SELF_DST" "$SELF_TMP"; then
+      mv "$SELF_TMP" "$SELF_DST"
+      chmod +x "$SELF_DST" 2>/dev/null || true
+      exec bash "$SELF_DST" --force "$@"
+    fi
+    rm -f "$SELF_TMP"
+  else
+    rm -f "$SELF_TMP"
+  fi
+fi
+
 # ── 파일 다운로드 + 교체 ─────────────────────────────────────────────────────
 FILES=(
   "scripts/notion-worklog.sh"
