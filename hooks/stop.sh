@@ -15,7 +15,7 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 
 # --- worklog-for-claude start ---
 # 미커밋 변경사항 확인 (.worklogs/ 제외 — 워크로그 아티팩트)
-DIRTY=$(git status --porcelain 2>/dev/null | grep -v ' \.worklogs/' | grep -v ' \.claude/' || true)
+DIRTY=$(git status --porcelain 2>/dev/null | grep -v ' \.worklogs/' || true)
 
 if [ -n "$DIRTY" ]; then
   jq -n '{
