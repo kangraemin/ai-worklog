@@ -206,4 +206,14 @@ fi
 NOW_TS=$(date +%s)
 echo "{\"timestamp\":$NOW_TS}" > "$SNAPSHOT_FILE" 2>/dev/null || echo "worklog-for-claude: snapshot 갱신 실패 ($SNAPSHOT_FILE)" >&2
 
+# ── pending 마커 정리 ─────────────────────────────────────────────────────────
+PENDING_DIR="$HOME/.claude/worklogs/.pending"
+if [ -d "$PENDING_DIR" ]; then
+  for _pf in "$PENDING_DIR"/*.json; do
+    [ -f "$_pf" ] || continue
+    _pcwd=$($PYTHON -c "import json; print(json.load(open('$_pf')).get('project_cwd',''))" 2>/dev/null || echo "")
+    [ "$_pcwd" = "$PROJECT_CWD" ] && rm -f "$_pf"
+  done
+fi
+
 echo "워크로그 작성 완료: $DATE $TIMESTAMP"
