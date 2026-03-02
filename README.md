@@ -239,8 +239,8 @@ All settings live in `settings.json` under `env`:
 | Date | date | Work date |
 | DateTime | date | Precise timestamp (for sorting) |
 | Project | select | Repository name |
-| Cost | number | Cost delta ($) |
 | Tokens | number | Token delta |
+| Cost | number | Cost delta ($) |
 | Duration | number | Claude work time (minutes) |
 | Model | select | Claude model used |
 

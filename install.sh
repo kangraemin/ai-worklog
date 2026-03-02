@@ -186,14 +186,14 @@ data = {
         'Date':     {'date': {}},
         'DateTime': {'date': {}},
         'Project':  {'select': {'options': []}},
+        'Tokens':   {'number': {'format': 'number'}},
         'Cost':     {'number': {'format': 'number'}},
         'Duration': {'number': {'format': 'number'}},
         'Model':    {'select': {'options': [
             {'name': 'claude-opus-4-6', 'color': 'purple'},
             {'name': 'claude-sonnet-4-6', 'color': 'blue'},
             {'name': 'claude-haiku-4-5', 'color': 'green'}
-        ]}},
-        'Tokens':   {'number': {'format': 'number'}}
+        ]}}
     }
 }
 print(json.dumps(data))
