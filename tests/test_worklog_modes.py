@@ -146,9 +146,10 @@ class TestSetModeScript(unittest.TestCase):
 
         env = {**os.environ, 'HOME': self.tmpdir}
         # .env 없어도 괜찮도록 (NOTION_TOKEN/DB_ID 불필요 — --set-mode 전용)
+        # cwd=self.tmpdir: 스크립트가 .claude/settings.json을 CWD 기준으로 탐색
         result = subprocess.run(
             ['bash', SCRIPT, '--dry-run', '--set-mode', mode, self.wl_dir],
-            capture_output=True, text=True, env=env
+            capture_output=True, text=True, env=env, cwd=self.tmpdir,
         )
         with open(settings_path) as f:
             updated = json.load(f)

@@ -378,7 +378,8 @@ class TestPostCommitManualMode(_GitRepoBase):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-class TestStopHookPromptType(_GitRepoBase):
+class TestStopHookCommand(_GitRepoBase):
+    """Stop hook이 command type (stop.sh)으로 정상 등록/교체되는지 검증"""
 
     def _install(self, inputs):
         """install.sh 실행"""
@@ -405,8 +406,8 @@ class TestStopHookPromptType(_GitRepoBase):
         with open(os.path.join(self.tmp, ".claude", "settings.json")) as f:
             return json.load(f)
 
-    def test_auto_commit_registers_prompt_type(self):
-        """auto-commit 활성화 시 Stop hook이 prompt type으로 등록"""
+    def test_auto_commit_registers_command_type(self):
+        """auto-commit=yes → Stop hook이 command type (stop.sh)으로 등록"""
         # lang=ko, scope=global, dest=git, track=yes, timing=each-commit, auto-commit=yes
         r = self._install(["1", "1", "3", "1", "1", "1"])
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -415,44 +416,42 @@ class TestStopHookPromptType(_GitRepoBase):
         stop_hooks = cfg.get("hooks", {}).get("Stop", [])
         self.assertTrue(len(stop_hooks) > 0, "Stop hook should be registered")
 
-        prompt_hooks = [
+        command_hooks = [
             h for g in stop_hooks for h in g.get("hooks", [])
-            if h.get("type") == "prompt"
+            if h.get("type") == "command" and "stop.sh" in h.get("command", "")
         ]
-        self.assertTrue(len(prompt_hooks) > 0, "Stop hook should be prompt type")
-        self.assertIn("/finish", prompt_hooks[0].get("prompt", ""))
-        self.assertEqual(prompt_hooks[0].get("timeout"), 120)
+        self.assertTrue(len(command_hooks) > 0, "Stop hook should be command type with stop.sh")
+        self.assertEqual(command_hooks[0].get("timeout"), 10)
 
-    def test_auto_commit_no_command_stop_hook(self):
-        """auto-commit 시 command type stop.sh hook이 없어야 함"""
+    def test_auto_commit_no_prompt_stop_hook(self):
+        """auto-commit=yes에서 prompt type stop hook은 없어야 함"""
         r = self._install(["1", "1", "3", "1", "1", "1"])
         self.assertEqual(r.returncode, 0, r.stderr)
 
         cfg = self._settings()
         stop_hooks = cfg.get("hooks", {}).get("Stop", [])
-        command_hooks = [
+        prompt_hooks = [
             h for g in stop_hooks for h in g.get("hooks", [])
-            if h.get("type") == "command" and "stop.sh" in h.get("command", "")
+            if h.get("type") == "prompt"
         ]
-        self.assertEqual(len(command_hooks), 0, "No command type stop.sh should exist")
+        self.assertEqual(len(prompt_hooks), 0, "No prompt type stop hook should exist")
 
     def test_no_auto_commit_no_stop_hook(self):
-        """auto-commit 비활성화 시 Stop hook 없음"""
+        """auto-commit=no → Stop hook 미등록"""
         r = self._install(["1", "1", "3", "1", "1", "2"])  # auto-commit=no
         self.assertEqual(r.returncode, 0, r.stderr)
 
         cfg = self._settings()
         self.assertNotIn("Stop", cfg.get("hooks", {}))
 
-    def test_upgrade_replaces_command_with_prompt(self):
-        """기존 command type stop.sh가 prompt type으로 교체됨"""
-        # 기존 설정 생성 (command type stop hook)
+    def test_upgrade_replaces_prompt_with_command(self):
+        """기존 prompt type stop hook → command type으로 교체"""
         d = os.path.join(self.tmp, ".claude")
         os.makedirs(d, exist_ok=True)
         old_cfg = {
             "env": {},
             "hooks": {
-                "Stop": [{"hooks": [{"type": "command", "command": f"{d}/hooks/stop.sh", "timeout": 30}]}]
+                "Stop": [{"hooks": [{"type": "prompt", "prompt": "/finish", "timeout": 120}]}]
             },
         }
         with open(os.path.join(d, "settings.json"), "w") as f:
@@ -465,13 +464,13 @@ class TestStopHookPromptType(_GitRepoBase):
         stop_hooks = cfg.get("hooks", {}).get("Stop", [])
         all_hooks = [h for g in stop_hooks for h in g.get("hooks", [])]
 
-        # command type 없어야 함
-        command_hooks = [h for h in all_hooks if h.get("type") == "command" and "stop.sh" in h.get("command", "")]
-        self.assertEqual(len(command_hooks), 0)
-
-        # prompt type 있어야 함
+        # prompt type 없어야 함
         prompt_hooks = [h for h in all_hooks if h.get("type") == "prompt"]
-        self.assertTrue(len(prompt_hooks) > 0)
+        self.assertEqual(len(prompt_hooks), 0, "Old prompt hook should be removed")
+
+        # command type 있어야 함
+        command_hooks = [h for h in all_hooks if h.get("type") == "command" and "stop.sh" in h.get("command", "")]
+        self.assertTrue(len(command_hooks) > 0, "New command hook should exist")
 
     def test_finish_command_installed(self):
         """finish.md 커맨드 파일이 설치됨"""
