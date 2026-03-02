@@ -22,13 +22,15 @@ SUMMARY_FILE=""
 PROJECT=""
 DATE=$(date +%Y-%m-%d)
 MODEL="claude-sonnet-4-6"
+NO_COST=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --project) PROJECT="$2"; shift 2 ;;
-    --date)    DATE="$2"; shift 2 ;;
-    --model)   MODEL="$2"; shift 2 ;;
-    *)         SUMMARY_FILE="$1"; shift ;;
+    --project)  PROJECT="$2"; shift 2 ;;
+    --date)     DATE="$2"; shift 2 ;;
+    --model)    MODEL="$2"; shift 2 ;;
+    --no-cost)  NO_COST=true; shift ;;
+    *)          SUMMARY_FILE="$1"; shift ;;
   esac
 done
 
@@ -78,32 +80,41 @@ TOKENS=0
 COST="0.000"
 DURATION_MIN=0
 
-if [ -f "$TOKEN_COST_SCRIPT" ]; then
-  TC_OUTPUT=$(python3 "$TOKEN_COST_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0.000")
-  TOKENS=$(echo "$TC_OUTPUT" | cut -d, -f1)
-  COST=$(echo "$TC_OUTPUT" | cut -d, -f2)
-fi
+if [ "$NO_COST" = "false" ]; then
+  if [ -f "$TOKEN_COST_SCRIPT" ]; then
+    TC_OUTPUT=$(python3 "$TOKEN_COST_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0.000")
+    TOKENS=$(echo "$TC_OUTPUT" | cut -d, -f1)
+    COST=$(echo "$TC_OUTPUT" | cut -d, -f2)
+  fi
 
-if [ -f "$DURATION_SCRIPT" ]; then
-  DUR_OUTPUT=$(python3 "$DURATION_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0")
-  DURATION_MIN=$(echo "$DUR_OUTPUT" | cut -d, -f2)
+  if [ -f "$DURATION_SCRIPT" ]; then
+    DUR_OUTPUT=$(python3 "$DURATION_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0")
+    DURATION_MIN=$(echo "$DUR_OUTPUT" | cut -d, -f2)
+  fi
 fi
 
 # ── 변경 파일 목록 ───────────────────────────────────────────────────────────
 CHANGED_FILES=$(git diff HEAD~1 HEAD --stat 2>/dev/null || echo "")
 
 # ── 워크로그 엔트리 조합 ─────────────────────────────────────────────────────
-if [ "$WORKLOG_LANG" = "en" ]; then
-  TOKEN_HEADER="### Token Usage"
-  TOKEN_MODEL="- Model: $MODEL"
-  TOKEN_COST_LINE="- This session: \$$COST"
-else
-  TOKEN_HEADER="### 토큰 사용량"
-  TOKEN_MODEL="- 모델: $MODEL"
-  TOKEN_COST_LINE="- 이번 작업: \$$COST"
-fi
+if [ "$NO_COST" = "true" ]; then
+  ENTRY="---
 
-ENTRY="---
+## $TIMESTAMP (auto)
+
+$SUMMARY"
+else
+  if [ "$WORKLOG_LANG" = "en" ]; then
+    TOKEN_HEADER="### Token Usage"
+    TOKEN_MODEL="- Model: $MODEL"
+    TOKEN_COST_LINE="- This session: \$$COST"
+  else
+    TOKEN_HEADER="### 토큰 사용량"
+    TOKEN_MODEL="- 모델: $MODEL"
+    TOKEN_COST_LINE="- 이번 작업: \$$COST"
+  fi
+
+  ENTRY="---
 
 ## $TIMESTAMP
 
@@ -112,6 +123,7 @@ $SUMMARY
 $TOKEN_HEADER
 $TOKEN_MODEL
 $TOKEN_COST_LINE"
+fi
 
 # ── 로컬 파일 저장 ───────────────────────────────────────────────────────────
 if [ "$WORKLOG_DEST" != "notion-only" ]; then

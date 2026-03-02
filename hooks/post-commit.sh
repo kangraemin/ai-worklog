@@ -114,7 +114,7 @@ fi
 TMPFILE=$(mktemp)
 echo "$SUMMARY" > "$TMPFILE"
 
-bash "$WRITE_SCRIPT" "$TMPFILE" 2>/dev/null || true
+bash "$WRITE_SCRIPT" "$TMPFILE" --no-cost 2>/dev/null || true
 
 rm -f "$TMPFILE"
 exit 0
