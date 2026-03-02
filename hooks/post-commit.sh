@@ -68,7 +68,8 @@ Write in this EXACT format (no code fences, no extra text):
 - What was done (2-3 lines max, be specific about the actual changes)
 
 ### Changed Files
-$FILES_LIST
+- \`filename\`: one-line description of what changed in this file
+(Write a description for EACH file listed above)
 "
   else
     PROMPT="이 git 커밋을 기반으로 워크로그 엔트리를 작성해줘.
@@ -86,7 +87,8 @@ $CHANGED_FILES
 - 실제 변경한 내용을 구체적으로 2-3줄 이내 작성
 
 ### 변경 파일
-$FILES_LIST
+- \`파일명\`: 이 파일에서 변경한 내용 한 줄 설명
+(위에 나열된 모든 파일에 대해 각각 설명을 작성)
 "
   fi
 
@@ -100,13 +102,13 @@ if [ -z "$SUMMARY" ]; then
 - $COMMIT_MSG
 
 ### Changed Files
-$FILES_LIST"
+$(echo "$CHANGED_FILES" | grep -v '^$' | sed 's|.*|&: (auto)|' | sed 's/^/- `/' | sed 's/: /`: /')"
   else
     SUMMARY="### 작업 내용
 - $COMMIT_MSG
 
 ### 변경 파일
-$FILES_LIST"
+$(echo "$CHANGED_FILES" | grep -v '^$' | sed 's|.*|&: (auto)|' | sed 's/^/- `/' | sed 's/: /`: /')"
   fi
 fi
 
@@ -114,7 +116,7 @@ fi
 TMPFILE=$(mktemp)
 echo "$SUMMARY" > "$TMPFILE"
 
-bash "$WRITE_SCRIPT" "$TMPFILE" --no-cost 2>/dev/null || true
+bash "$WRITE_SCRIPT" "$TMPFILE" 2>/dev/null || true
 
 rm -f "$TMPFILE"
 exit 0
