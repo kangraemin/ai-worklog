@@ -21,7 +21,7 @@ set -euo pipefail
 SUMMARY_FILE=""
 PROJECT=""
 DATE=$(date +%Y-%m-%d)
-MODEL="claude-sonnet-4-6"
+MODEL="${WORKLOG_MODEL:-claude-sonnet-4-6}"
 NO_COST=false
 
 while [ $# -gt 0 ]; do
