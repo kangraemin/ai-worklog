@@ -103,9 +103,13 @@ DURATION_MIN=0
 
 if [ "$NO_COST" = "false" ]; then
   if [ -f "$TOKEN_COST_SCRIPT" ]; then
-    TC_OUTPUT=$($PYTHON "$TOKEN_COST_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0.000")
+    TC_OUTPUT=$($PYTHON "$TOKEN_COST_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0.000,")
     TOKENS=$(echo "$TC_OUTPUT" | cut -d, -f1)
     COST=$(echo "$TC_OUTPUT" | cut -d, -f2)
+    TC_MODEL=$(echo "$TC_OUTPUT" | cut -d, -f3)
+    if [ -n "$TC_MODEL" ]; then
+      MODEL="$TC_MODEL"
+    fi
   fi
 
   if [ -f "$DURATION_SCRIPT" ]; then
