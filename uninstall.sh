@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -64,7 +66,7 @@ info "대상: $TARGET_DIR"
 # ── settings.json에서 훅 + 환경변수 제거 ────────────────────────────────────
 header "settings.json 정리"
 
-python3 - "$SETTINGS_FILE" "$TARGET_DIR" <<'PYEOF'
+$PYTHON - "$SETTINGS_FILE" "$TARGET_DIR" <<'PYEOF'
 import json, sys, os
 
 settings_file = sys.argv[1]

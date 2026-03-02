@@ -6,6 +6,8 @@
 
 set -euo pipefail
 
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
+
 REPO="kangraemin/ai-worklog"
 RAW_BASE="https://raw.githubusercontent.com/$REPO/main"
 API_URL="https://api.github.com/repos/$REPO/commits/main"
@@ -34,7 +36,7 @@ if [ "$FORCE" = false ] && [ -f "$CHECKED_FILE" ]; then
 fi
 
 # ── 최신 SHA 조회 ────────────────────────────────────────────────────────────
-LATEST_SHA=$(curl -sf --max-time 5 "$API_URL" 2>/dev/null | python3 -c "
+LATEST_SHA=$(curl -sf --max-time 5 "$API_URL" 2>/dev/null | $PYTHON -c "
 import json, sys
 try:
     d = json.load(sys.stdin)

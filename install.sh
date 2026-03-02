@@ -46,9 +46,15 @@ check_cmd() {
 
 MISSING=()
 check_cmd "claude"  || MISSING+=("claude (Claude Code CLI)")
-check_cmd "python3" || MISSING+=("python3")
+# python3 또는 python 감지 (Windows는 python만 있음)
+if command -v python3 &>/dev/null; then
+  PYTHON=python3; ok "python3 $(command -v python3)"
+elif command -v python &>/dev/null; then
+  PYTHON=python; ok "python $(command -v python)"
+else
+  MISSING+=("python3 (or python)")
+fi
 check_cmd "curl"    || MISSING+=("curl")
-check_cmd "jq"      || MISSING+=("jq")
 
 if [ ${#MISSING[@]} -gt 0 ]; then
   err "$(t '필수 도구가 없습니다:' 'Required tools are missing:')"
@@ -151,7 +157,7 @@ if [ "$WORKLOG_DEST" != "git" ]; then
 
     # 기존 NOTION_DB_ID 탐색
     if [ -z "$NOTION_DB_ID" ]; then
-      NOTION_DB_ID=$(python3 -c "
+      NOTION_DB_ID=$($PYTHON -c "
 import json, os
 for path in ['$TARGET_DIR/settings.json', os.path.expanduser('~/.claude/settings.json')]:
     try:
@@ -178,7 +184,7 @@ for path in ['$TARGET_DIR/settings.json', os.path.expanduser('~/.claude/settings
       read -r PARENT_INPUT
 
       # URL에서 page_id 추출
-      PARENT_ID=$(echo "$PARENT_INPUT" | python3 -c "
+      PARENT_ID=$(echo "$PARENT_INPUT" | $PYTHON -c "
 import sys, re
 raw = sys.stdin.read().strip()
 m = re.search(r'([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', raw)
@@ -188,7 +194,7 @@ print(m.group(1) if m else raw)
       if [ -n "$PARENT_ID" ]; then
         info "$(t 'DB 생성 중...' 'Creating DB...')"
 
-        DB_PAYLOAD=$(python3 -c "
+        DB_PAYLOAD=$($PYTHON -c "
 import json
 data = {
     'parent': {'type': 'page_id', 'page_id': '$PARENT_ID'},
@@ -221,11 +227,11 @@ print(json.dumps(data))
         BODY=$(echo "$RESPONSE" | sed '$d')
 
         if [ "$HTTP_CODE" = "200" ]; then
-          NOTION_DB_ID=$(echo "$BODY" | jq -r '.id')
+          NOTION_DB_ID=$(echo "$BODY" | $PYTHON -c "import json,sys; print(json.load(sys.stdin)['id'])")
           ok "$(t 'DB 생성 완료' 'DB created'): $NOTION_DB_ID"
         else
           err "$(t 'DB 생성 실패' 'DB creation failed') (HTTP $HTTP_CODE)"
-          echo "$BODY" | jq -r '.message // .' 2>/dev/null || echo "$BODY"
+          echo "$BODY" | $PYTHON -c "import json,sys; d=json.load(sys.stdin); print(d.get('message',str(d)))" 2>/dev/null || echo "$BODY"
           echo ""
           printf "$(t '기존 NOTION_DB_ID를 직접 입력하시겠습니까? (빈 값이면 스킵)' 'Enter an existing NOTION_DB_ID manually? (blank to skip)'): "
           read -r NOTION_DB_ID
@@ -330,7 +336,7 @@ install_file() {
     return
   fi
 
-  python3 - "$src" "$dst" "$START" "$END" <<'PYEOF'
+  $PYTHON - "$src" "$dst" "$START" "$END" <<'PYEOF'
 import sys
 
 src_path     = sys.argv[1]
@@ -446,7 +452,7 @@ header "$(t 'settings.json 설정' 'Updating settings.json')"
 
 SETTINGS_FILE="$TARGET_DIR/settings.json"
 
-python3 - "$SETTINGS_FILE" "$TARGET_DIR" "$WORKLOG_TIMING" "$WORKLOG_DEST" "$WORKLOG_GIT_TRACK" "${NOTION_DB_ID:-}" "$WORKLOG_LANG" "$AUTO_COMMIT" <<'PYEOF'
+$PYTHON - "$SETTINGS_FILE" "$TARGET_DIR" "$WORKLOG_TIMING" "$WORKLOG_DEST" "$WORKLOG_GIT_TRACK" "${NOTION_DB_ID:-}" "$WORKLOG_LANG" "$AUTO_COMMIT" <<'PYEOF'
 import json, sys, os
 
 settings_file = sys.argv[1]

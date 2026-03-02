@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
+
 # .env 탐색: ~/.claude/.env 먼저, AI_WORKLOG_DIR/.env로 덮어쓰기 (cascade)
 # 같은 경로여도 중복 source는 무해 (idempotent)
 for _envfile in "$HOME/.claude/.env" ${AI_WORKLOG_DIR:+"$AI_WORKLOG_DIR/.env"}; do
@@ -30,7 +32,7 @@ if [ -z "${NOTION_DB_ID:-}" ]; then
 fi
 
 # 본문을 Notion blocks JSON으로 변환 (마크다운 → heading/bullet/paragraph)
-CHILDREN_JSON=$(python3 - "$CONTENT" <<'PYEOF'
+CHILDREN_JSON=$($PYTHON - "$CONTENT" <<'PYEOF'
 import sys, json
 
 content = sys.argv[1] if len(sys.argv) > 1 else ''
@@ -79,7 +81,7 @@ PYEOF
 )
 
 # API 페이로드 생성
-PAYLOAD=$(python3 - "$NOTION_DB_ID" "$TITLE" "$DATE" "$PROJECT" "$COST" "$DURATION" "$MODEL" "$TOKENS" "$DATETIME" "$CHILDREN_JSON" <<'PYEOF'
+PAYLOAD=$($PYTHON - "$NOTION_DB_ID" "$TITLE" "$DATE" "$PROJECT" "$COST" "$DURATION" "$MODEL" "$TOKENS" "$DATETIME" "$CHILDREN_JSON" <<'PYEOF'
 import json, sys
 cost     = round(float(sys.argv[5]), 3); cost     = cost     if cost     else None
 duration = int(sys.argv[6]);             duration = duration if duration else None

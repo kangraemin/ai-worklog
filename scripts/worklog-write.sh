@@ -17,6 +17,8 @@
 
 set -euo pipefail
 
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
+
 # ── 파라미터 파싱 ─────────────────────────────────────────────────────────────
 SUMMARY_FILE=""
 PROJECT=""
@@ -58,7 +60,7 @@ AI_WORKLOG_DIR="${AI_WORKLOG_DIR:-$HOME/.claude}"
 _load_settings_env() {
   local f="$1"
   [ -f "$f" ] || return 0
-  eval "$(python3 -c "
+  eval "$($PYTHON -c "
 import json
 try:
     cfg = json.load(open('$f'))
@@ -86,7 +88,7 @@ SNAPSHOT_FILE="$SNAPSHOT_DIR/.snapshot"
 mkdir -p "$SNAPSHOT_DIR"
 
 if [ -f "$SNAPSHOT_FILE" ]; then
-  SNAPSHOT_TS=$(python3 -c "import json; print(json.load(open('$SNAPSHOT_FILE')).get('timestamp', 0))" 2>/dev/null || echo "0")
+  SNAPSHOT_TS=$($PYTHON -c "import json; print(json.load(open('$SNAPSHOT_FILE')).get('timestamp', 0))" 2>/dev/null || echo "0")
 else
   SNAPSHOT_TS=0
 fi
@@ -101,13 +103,13 @@ DURATION_MIN=0
 
 if [ "$NO_COST" = "false" ]; then
   if [ -f "$TOKEN_COST_SCRIPT" ]; then
-    TC_OUTPUT=$(python3 "$TOKEN_COST_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0.000")
+    TC_OUTPUT=$($PYTHON "$TOKEN_COST_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0.000")
     TOKENS=$(echo "$TC_OUTPUT" | cut -d, -f1)
     COST=$(echo "$TC_OUTPUT" | cut -d, -f2)
   fi
 
   if [ -f "$DURATION_SCRIPT" ]; then
-    DUR_OUTPUT=$(python3 "$DURATION_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0")
+    DUR_OUTPUT=$($PYTHON "$DURATION_SCRIPT" "$SNAPSHOT_TS" "$PROJECT_CWD" 2>/dev/null || echo "0,0")
     DURATION_MIN=$(echo "$DUR_OUTPUT" | cut -d, -f2)
   fi
 fi
