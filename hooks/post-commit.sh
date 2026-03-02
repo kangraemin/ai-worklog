@@ -18,6 +18,20 @@ REPO_HOOK="$(git rev-parse --git-dir 2>/dev/null)/hooks/post-commit.local"
 [ -x "$REPO_HOOK" ] && "$REPO_HOOK"
 
 # ── AI_WORKLOG_DIR 탐색 ─────────────────────────────────────────────────────
+# 로컬 설치 우선: .claude/settings.json이 있으면 거기서 읽기
+if [ -z "${AI_WORKLOG_DIR:-}" ]; then
+  LOCAL_SETTINGS="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/settings.json"
+  if [ -f "$LOCAL_SETTINGS" ]; then
+    AI_WORKLOG_DIR=$(python3 -c "
+import json
+try:
+    cfg = json.load(open('$LOCAL_SETTINGS'))
+    print(cfg.get('env', {}).get('AI_WORKLOG_DIR', ''))
+except:
+    pass
+" 2>/dev/null || true)
+  fi
+fi
 AI_WORKLOG_DIR="${AI_WORKLOG_DIR:-$HOME/.claude}"
 WRITE_SCRIPT="$AI_WORKLOG_DIR/scripts/worklog-write.sh"
 

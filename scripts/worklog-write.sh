@@ -104,14 +104,25 @@ if [ "$NO_COST" = "true" ]; then
 
 $SUMMARY"
 else
+  # 토큰 콤마 포맷팅 (1234567 → 1,234,567)
+  TOKENS_FMT=$(printf "%'d" "$TOKENS" 2>/dev/null || echo "$TOKENS")
+
   if [ "$WORKLOG_LANG" = "en" ]; then
     TOKEN_HEADER="### Token Usage"
     TOKEN_MODEL="- Model: $MODEL"
-    TOKEN_COST_LINE="- This session: \$$COST"
+    if [ "$TOKENS" -gt 0 ] 2>/dev/null; then
+      TOKEN_COST_LINE="- This session: ${TOKENS_FMT} tokens · \$$COST"
+    else
+      TOKEN_COST_LINE="- This session: \$$COST"
+    fi
   else
     TOKEN_HEADER="### 토큰 사용량"
     TOKEN_MODEL="- 모델: $MODEL"
-    TOKEN_COST_LINE="- 이번 작업: \$$COST"
+    if [ "$TOKENS" -gt 0 ] 2>/dev/null; then
+      TOKEN_COST_LINE="- 이번 작업: ${TOKENS_FMT} 토큰 · \$$COST"
+    else
+      TOKEN_COST_LINE="- 이번 작업: \$$COST"
+    fi
   fi
 
   ENTRY="---

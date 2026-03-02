@@ -70,6 +70,16 @@ read -r SCOPE_CHOICE
 SCOPE_CHOICE="${SCOPE_CHOICE:-1}"
 
 if [ "$SCOPE_CHOICE" = "2" ]; then
+  # 자체 repo 안에서 실행 감지
+  if [ "$(pwd)" = "$PACKAGE_DIR" ]; then
+    warn "$(t 'worklog-for-claude 디렉토리 안에서 실행 중입니다.' \
+            'Running inside worklog-for-claude directory.')"
+    info "$(t '대상 프로젝트 루트에서 실행해주세요.' \
+            'Please run from your target project root.')"
+    info "$(t '예: cd /your/project && '"$PACKAGE_DIR"'/install.sh' \
+            'e.g.: cd /your/project && '"$PACKAGE_DIR"'/install.sh')"
+    exit 1
+  fi
   TARGET_DIR="$(pwd)/.claude"
   SCOPE="local"
 else
