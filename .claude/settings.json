@@ -1,6 +1,8 @@
 {
   "env": {
-    "NOTION_DB_ID": "316d4919-b6eb-8170-8adb-f1a8f43c3ece"
+    "NOTION_DB_ID": "316d4919-b6eb-8170-8adb-f1a8f43c3ece",
+    "WORKLOG_DEST": "notion-only",
+    "WORKLOG_GIT_TRACK": "false"
   },
   "hooks": {}
 }
