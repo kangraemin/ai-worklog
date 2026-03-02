@@ -460,16 +460,16 @@ def add_command_hook(event, command, timeout, is_async):
 for event, command, timeout, is_async in hook_defs:
     add_command_hook(event, command, timeout, is_async)
 
-# ── Stop hook: prompt type (auto-commit) ──
-STOP_PROMPT_MARKER = '/finish'
+# ── Stop hook: command type (auto-commit) ──
+STOP_HOOK_MARKERS = ['stop.sh', '/finish']
 
 def remove_old_stop_hooks():
-    """기존 command type stop.sh 및 이전 prompt type Stop hook 제거"""
+    """기존 Stop hook 제거 (command/prompt 모두)"""
     stop_hooks = hooks.get('Stop', [])
     hooks['Stop'] = [
         g for g in stop_hooks
         if not any(
-            ('stop.sh' in h.get('command', '') or STOP_PROMPT_MARKER in h.get('prompt', ''))
+            any(m in h.get('command', '') or m in h.get('prompt', '') for m in STOP_HOOK_MARKERS)
             for h in g.get('hooks', [])
         )
     ]
@@ -478,20 +478,16 @@ def remove_old_stop_hooks():
 
 if auto_commit == 'true':
     remove_old_stop_hooks()
-    stop_prompt = (
-        'git status로 미커밋 변경사항이 있는지 확인해. '
-        '있으면 /finish 스킬을 실행해서 커밋, 푸시, 워크로그 작성을 해줘. '
-        '없으면 할 일 없음.'
-    )
+    stop_command = f'{target_dir}/hooks/stop.sh'
     stop_hooks = hooks.setdefault('Stop', [])
     stop_hooks.append({
         'hooks': [{
-            'type': 'prompt',
-            'prompt': stop_prompt,
-            'timeout': 120,
+            'type': 'command',
+            'command': stop_command,
+            'timeout': 10,
         }]
     })
-    print(f'  ✓ Stop hook added: prompt type (/finish)')
+    print(f'  ✓ Stop hook added: command type (stop.sh)')
 else:
     remove_old_stop_hooks()
 
@@ -580,7 +576,7 @@ echo "  ├─ $(t '언어' 'Language'):  $WORKLOG_LANG"
 if [ -n "$NOTION_DB_ID" ]; then
 echo "  ├─ Notion DB: $NOTION_DB_ID"
 fi
-echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse, SessionEnd$([ "$AUTO_COMMIT" = "true" ] && echo ", Stop (prompt:/finish)")"
+echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse, SessionEnd$([ "$AUTO_COMMIT" = "true" ] && echo ", Stop (stop.sh)")"
 echo "  ├─ $(t 'Git Hook' 'Git Hook'):  post-commit ($(t '터미널 커밋 시 워크로그' 'worklog on terminal commits'))"
 echo "  └─ $(t '자동 커밋' 'Auto-Commit'): $([ "$AUTO_COMMIT" = "true" ] && t '사용 (/finish)' 'Enabled (/finish)' || t '사용 안 함' 'Disabled')"
 

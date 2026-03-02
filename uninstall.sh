@@ -78,17 +78,26 @@ hooks = cfg.get('hooks', {})
 worklog_commands = [
     f'{target_dir}/hooks/worklog.sh',
     f'{target_dir}/hooks/session-end.sh',
+    f'{target_dir}/hooks/stop.sh',
 ]
+stop_markers = ['stop.sh', '/finish']
 
 removed_hooks = []
 for event in list(hooks.keys()):
     groups = hooks[event]
     new_groups = []
     for group in groups:
-        new_hooks = [
-            h for h in group.get('hooks', [])
-            if h.get('command', '').rstrip() not in worklog_commands
-        ]
+        new_hooks = []
+        for h in group.get('hooks', []):
+            cmd = h.get('command', '').rstrip()
+            prompt = h.get('prompt', '')
+            # command type: worklog_commands에 해당하면 제거
+            if cmd in worklog_commands:
+                continue
+            # prompt/command type Stop hook: 마커 포함하면 제거
+            if event == 'Stop' and any(m in cmd or m in prompt for m in stop_markers):
+                continue
+            new_hooks.append(h)
         if new_hooks:
             group['hooks'] = new_hooks
             new_groups.append(group)
@@ -135,13 +144,19 @@ remove_file() {
 remove_file "$TARGET_DIR/scripts/notion-worklog.sh"
 remove_file "$TARGET_DIR/scripts/notion-migrate-worklogs.sh"
 remove_file "$TARGET_DIR/scripts/duration.py"
+remove_file "$TARGET_DIR/scripts/token-cost.py"
 remove_file "$TARGET_DIR/scripts/update-check.sh"
+remove_file "$TARGET_DIR/scripts/worklog-write.sh"
 remove_file "$TARGET_DIR/hooks/worklog.sh"
 remove_file "$TARGET_DIR/hooks/session-end.sh"
+remove_file "$TARGET_DIR/hooks/stop.sh"
+remove_file "$TARGET_DIR/hooks/post-commit.sh"
 remove_file "$TARGET_DIR/commands/worklog.md"
 remove_file "$TARGET_DIR/commands/migrate-worklogs.md"
 remove_file "$TARGET_DIR/commands/update-worklog.md"
+remove_file "$TARGET_DIR/commands/finish.md"
 remove_file "$TARGET_DIR/rules/worklog-rules.md"
+remove_file "$TARGET_DIR/rules/auto-commit-rules.md"
 remove_file "$TARGET_DIR/.version"
 remove_file "$TARGET_DIR/.version-checked"
 
