@@ -73,12 +73,20 @@ FILES=(
   "scripts/notion-worklog.sh"
   "scripts/notion-migrate-worklogs.sh"
   "scripts/duration.py"
+  "scripts/token-cost.py"
+  "scripts/worklog-write.sh"
   "scripts/update-check.sh"
+  "hooks/post-commit.sh"
+  "hooks/stop.sh"
   "hooks/worklog.sh"
   "hooks/session-end.sh"
+  "commands/finish.md"
+  "commands/update-worklog.md"
   "commands/worklog.md"
   "commands/migrate-worklogs.md"
+  "rules/auto-commit-rules.md"
   "rules/worklog-rules.md"
+  "git-hooks/post-commit"
 )
 
 FAILED=0

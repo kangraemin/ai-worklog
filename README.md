@@ -334,6 +334,16 @@ It parses Claude Code's actual JSONL logs using official token counts and model-
 Yes. Run `/migrate-worklogs --all` to bulk-import existing `.worklogs/*.md` files into Notion. Use `--date` to migrate specific dates.
 </details>
 
+<details>
+<summary><strong>What if I regenerate my Notion token?</strong></summary>
+
+Regenerating your Notion integration token invalidates the old one. Update in two steps:
+1. Replace `NOTION_TOKEN` in `~/.claude/.env` (or `<project>/.claude/.env` for local installs)
+2. Re-share the database with the new integration in Notion (Share → Add connections)
+
+Without step 2, API calls will fail with a permission error even though the token itself is valid.
+</details>
+
 ---
 
 ## Contributing
