@@ -36,7 +36,8 @@ AI_WORKLOG_DIR="${AI_WORKLOG_DIR:-$HOME/.claude}"
 WRITE_SCRIPT="$AI_WORKLOG_DIR/scripts/worklog-write.sh"
 
 if [ ! -f "$WRITE_SCRIPT" ]; then
-  # worklog-for-claude 미설치
+  echo "worklog-for-claude: worklog-write.sh not found at $WRITE_SCRIPT" >&2
+  echo "worklog-for-claude: AI_WORKLOG_DIR=$AI_WORKLOG_DIR — reinstall may be needed" >&2
   exit 0
 fi
 

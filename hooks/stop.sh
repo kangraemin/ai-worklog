@@ -1,6 +1,9 @@
 #!/bin/bash
 # Stop hook: 미커밋 변경사항이 있으면 Claude에게 /finish 실행 지시
 
+# jq 필수 확인
+command -v jq &>/dev/null || exit 0
+
 INPUT=$(cat)
 STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
 

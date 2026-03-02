@@ -131,6 +131,19 @@ if [ "$WORKLOG_DEST" != "git" ]; then
     echo ""
     printf "NOTION_TOKEN ($(t '빈 값이면 나중에 설정' 'leave blank to set later')): "
     read -r NOTION_TOKEN
+
+    # 새 입력 토큰만 형식 검증 (ntn_ 또는 secret_ 로 시작, 최소 20자)
+    if [ -n "$NOTION_TOKEN" ]; then
+      if [[ ! "$NOTION_TOKEN" =~ ^(ntn_|secret_) ]] || [ ${#NOTION_TOKEN} -lt 20 ]; then
+        warn "$(t '토큰 형식이 올바르지 않을 수 있습니다 (ntn_ 또는 secret_ 로 시작해야 합니다).' \
+                'Token format may be invalid (should start with ntn_ or secret_).')"
+        printf "$(t '계속 진행하시겠습니까? [y/N] ' 'Continue anyway? [y/N] ')"
+        read -r CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
+          NOTION_TOKEN=""
+        fi
+      fi
+    fi
   fi
 
   if [ -n "$NOTION_TOKEN" ]; then
@@ -198,7 +211,7 @@ data = {
 print(json.dumps(data))
 ")
 
-        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.notion.com/v1/databases" \
+        RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 -w "\n%{http_code}" -X POST "https://api.notion.com/v1/databases" \
           -H "Authorization: Bearer $NOTION_TOKEN" \
           -H "Notion-Version: 2022-06-28" \
           -H "Content-Type: application/json" \
@@ -216,6 +229,11 @@ print(json.dumps(data))
           echo ""
           printf "$(t '기존 NOTION_DB_ID를 직접 입력하시겠습니까? (빈 값이면 스킵)' 'Enter an existing NOTION_DB_ID manually? (blank to skip)'): "
           read -r NOTION_DB_ID
+          # DB ID 형식 검증 (32자 hex 또는 하이픈 포함 UUID)
+          if [ -n "$NOTION_DB_ID" ] && [[ ! "$NOTION_DB_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]; then
+            warn "$(t 'DB ID 형식이 올바르지 않을 수 있습니다 (32자 hex 또는 UUID 형식).' \
+                    'DB ID format may be invalid (expected 32-char hex or UUID).')"
+          fi
         fi
       fi
     fi

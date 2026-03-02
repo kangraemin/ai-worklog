@@ -179,6 +179,6 @@ fi
 
 # ── 스냅샷 갱신 ──────────────────────────────────────────────────────────────
 NOW_TS=$(date +%s)
-echo "{\"timestamp\":$NOW_TS}" > "$SNAPSHOT_FILE"
+echo "{\"timestamp\":$NOW_TS}" > "$SNAPSHOT_FILE" 2>/dev/null || echo "worklog-for-claude: snapshot 갱신 실패 ($SNAPSHOT_FILE)" >&2
 
 echo "워크로그 작성 완료: $DATE $TIMESTAMP"

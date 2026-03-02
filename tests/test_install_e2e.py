@@ -522,16 +522,16 @@ class TestEnvFileHandling(_Base):
     def test_env_created_with_new_token(self):
         """토큰 입력 시 .env 파일 생성 및 토큰 기록"""
         self._seed_db_id()
-        # lang=ko, scope=global, dest=both, token=my_secret_token, track=yes, timing=each-commit, auto-commit=yes
-        self._run(["1", "1", "1", "my_secret_token", "1", "1", "1"])
+        # lang=ko, scope=global, dest=both, token=ntn_test_token_abcdef123456, track=yes, timing=each-commit, auto-commit=yes
+        self._run(["1", "1", "1", "ntn_test_token_abcdef123456", "1", "1", "1"])
         env_path = os.path.join(self.tmp, ".claude", ".env")
         self.assertTrue(os.path.exists(env_path))
         with open(env_path) as f:
-            self.assertIn("NOTION_TOKEN=my_secret_token", f.read())
+            self.assertIn("NOTION_TOKEN=ntn_test_token_abcdef123456", f.read())
 
     def test_env_file_permission_600(self):
         self._seed_db_id()
-        self._run(["1", "1", "1", "my_secret_token", "1", "1", "1"])
+        self._run(["1", "1", "1", "ntn_test_token_abcdef123456", "1", "1", "1"])
         env_path = os.path.join(self.tmp, ".claude", ".env")
         if os.path.exists(env_path):
             mode = stat.S_IMODE(os.stat(env_path).st_mode)
