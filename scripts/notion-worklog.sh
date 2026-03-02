@@ -5,12 +5,10 @@
 set -euo pipefail
 
 # .env 탐색: ~/.claude/.env 먼저, AI_WORKLOG_DIR/.env로 덮어쓰기 (cascade)
-if [ -f "$HOME/.claude/.env" ]; then
-  set -a; source "$HOME/.claude/.env"; set +a
-fi
-if [ -n "${AI_WORKLOG_DIR:-}" ] && [ "$AI_WORKLOG_DIR" != "$HOME/.claude" ] && [ -f "$AI_WORKLOG_DIR/.env" ]; then
-  set -a; source "$AI_WORKLOG_DIR/.env"; set +a
-fi
+# 같은 경로여도 중복 source는 무해 (idempotent)
+for _envfile in "$HOME/.claude/.env" ${AI_WORKLOG_DIR:+"$AI_WORKLOG_DIR/.env"}; do
+  [ -f "$_envfile" ] && { set -a; source "$_envfile"; set +a; }
+done
 
 TITLE="${1:?title required}"
 DATE="${2:?date required}"

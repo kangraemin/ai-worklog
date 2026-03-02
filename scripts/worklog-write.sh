@@ -53,6 +53,25 @@ fi
 
 # ── 기본값 설정 ───────────────────────────────────────────────────────────────
 AI_WORKLOG_DIR="${AI_WORKLOG_DIR:-$HOME/.claude}"
+
+# settings.json env 로드 (NOTION_DB_ID 등 Notion 전송에 필요한 값)
+_load_settings_env() {
+  local f="$1"
+  [ -f "$f" ] || return 0
+  eval "$(python3 -c "
+import json
+try:
+    cfg = json.load(open('$f'))
+    for k, v in cfg.get('env', {}).items():
+        print(f'export {k}=\"{v}\"')
+except: pass
+" 2>/dev/null || true)"
+}
+# 글로벌 → 프로젝트 순서로 로드 (프로젝트가 덮어씀)
+_load_settings_env "$AI_WORKLOG_DIR/settings.json"
+_PROJECT_CWD_EARLY=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+[ -f "$_PROJECT_CWD_EARLY/.claude/settings.json" ] && _load_settings_env "$_PROJECT_CWD_EARLY/.claude/settings.json"
+
 WORKLOG_DEST="${WORKLOG_DEST:-git}"
 WORKLOG_GIT_TRACK="${WORKLOG_GIT_TRACK:-true}"
 WORKLOG_LANG="${WORKLOG_LANG:-ko}"

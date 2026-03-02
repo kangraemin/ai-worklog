@@ -1,20 +1,18 @@
 #!/bin/bash
-# worklog-for-claude 자동 업데이트 체커
+# ai-worklog 자동 업데이트 체커
 # Usage: update-check.sh [--force] [--check-only]
 #   --force      : 24h throttle 무시하고 즉시 체크
 #   --check-only : 버전 확인만 (업데이트 안 함)
 
 set -euo pipefail
 
-REPO="kangraemin/worklog-for-claude"
+REPO="kangraemin/ai-worklog"
 RAW_BASE="https://raw.githubusercontent.com/$REPO/main"
 API_URL="https://api.github.com/repos/$REPO/commits/main"
 
 AI_WORKLOG_DIR="${AI_WORKLOG_DIR:-$HOME/.claude}"
 VERSION_FILE="$AI_WORKLOG_DIR/.version"
 CHECKED_FILE="$AI_WORKLOG_DIR/.version-checked"
-FILES_VERSION="2"  # FILES 배열 변경 시 bump → 기존 유저도 전체 재다운로드
-FILES_VERSION_FILE="$AI_WORKLOG_DIR/.files-version"
 
 FORCE=false
 CHECK_ONLY=false
@@ -24,12 +22,6 @@ for arg in "$@"; do
     --check-only) CHECK_ONLY=true ;;
   esac
 done
-
-# FILES 배열 변경 감지 → 기존 유저도 전체 재다운로드
-INSTALLED_FILES_VERSION=$(cat "$FILES_VERSION_FILE" 2>/dev/null || echo "0")
-if [ "$FILES_VERSION" != "$INSTALLED_FILES_VERSION" ]; then
-  FORCE=true
-fi
 
 # ── 24시간 throttle ───────────────────────────────────────────────────────────
 if [ "$FORCE" = false ] && [ -f "$CHECKED_FILE" ]; then
@@ -63,7 +55,7 @@ INSTALLED_SHA=$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")
 if [ "$CHECK_ONLY" = true ]; then
   echo "installed: $INSTALLED_SHA"
   echo "latest:    $LATEST_SHA"
-  if [ "$LATEST_SHA" = "$INSTALLED_SHA" ] && [ "$FILES_VERSION" = "$INSTALLED_FILES_VERSION" ]; then
+  if [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
     echo "status: up-to-date"
   else
     echo "status: update-available"
@@ -71,21 +63,23 @@ if [ "$CHECK_ONLY" = true ]; then
   exit 0
 fi
 
-# ── 업데이트 필요 없으면 종료 (--force 시 건너뜀) ─────────────────────────────
-if [ "$FORCE" = false ] && [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
+# ── 업데이트 필요 없으면 종료 ────────────────────────────────────────────────
+if [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
   exit 0
 fi
 
-# ── 자기 자신 먼저 업데이트 (bootstrap) ────────────────────────────────────────
-SELF="scripts/update-check.sh"
-SELF_DST="$AI_WORKLOG_DIR/$SELF"
-if [ -f "$SELF_DST" ]; then
+# ── bootstrap: 자기 자신을 먼저 업데이트 후 재실행 ────────────────────────────
+# 옛날 버전의 FILES 배열이 불완전할 수 있으므로,
+# 새 버전의 update-check.sh로 교체 후 재실행해서 전체 파일을 받는다.
+SELF_SCRIPT="$AI_WORKLOG_DIR/scripts/update-check.sh"
+if [ "${_UPDATE_BOOTSTRAPPED:-}" != "1" ]; then
   SELF_TMP=$(mktemp)
-  if curl -sf --max-time 10 "$RAW_BASE/$SELF" -o "$SELF_TMP" 2>/dev/null; then
-    if ! cmp -s "$SELF_DST" "$SELF_TMP"; then
-      mv "$SELF_TMP" "$SELF_DST"
-      chmod +x "$SELF_DST" 2>/dev/null || true
-      exec bash "$SELF_DST" --force "$@"
+  if curl -sf --max-time 10 "$RAW_BASE/scripts/update-check.sh" -o "$SELF_TMP" 2>/dev/null; then
+    if ! cmp -s "$SELF_TMP" "$SELF_SCRIPT"; then
+      mv "$SELF_TMP" "$SELF_SCRIPT"
+      chmod +x "$SELF_SCRIPT"
+      export _UPDATE_BOOTSTRAPPED=1
+      exec bash "$SELF_SCRIPT" --force
     fi
     rm -f "$SELF_TMP"
   else
@@ -95,34 +89,44 @@ fi
 
 # ── 파일 다운로드 + 교체 ─────────────────────────────────────────────────────
 FILES=(
-  "scripts/notion-worklog.sh"
-  "scripts/notion-migrate-worklogs.sh"
-  "scripts/duration.py"
-  "scripts/token-cost.py"
+  # scripts
   "scripts/worklog-write.sh"
+  "scripts/notion-worklog.sh"
+  "scripts/notion-create-db.sh"
+  "scripts/notion-migrate-worklogs.sh"
+  "scripts/token-cost.py"
+  "scripts/duration.py"
   "scripts/update-check.sh"
+  # hooks
   "hooks/post-commit.sh"
-  "hooks/stop.sh"
   "hooks/worklog.sh"
   "hooks/session-end.sh"
+  "hooks/stop.sh"
+  # git-hooks
+  "git-hooks/post-commit"
+  # commands
+  "commands/worklog.md"
   "commands/finish.md"
   "commands/update-worklog.md"
-  "commands/worklog.md"
   "commands/migrate-worklogs.md"
-  "rules/auto-commit-rules.md"
+  # rules
   "rules/worklog-rules.md"
-  "git-hooks/post-commit"
+  "rules/auto-commit-rules.md"
+  # install
+  "install.sh"
 )
 
 FAILED=0
+UPDATED=0
 for file in "${FILES[@]}"; do
   dst="$AI_WORKLOG_DIR/$file"
-  [ -f "$dst" ] || continue  # 설치 안 된 파일은 스킵
+  mkdir -p "$(dirname "$dst")"
 
   tmp=$(mktemp)
   if curl -sf --max-time 10 "$RAW_BASE/$file" -o "$tmp" 2>/dev/null; then
     mv "$tmp" "$dst"
     chmod +x "$dst" 2>/dev/null || true
+    UPDATED=$(( UPDATED + 1 ))
   else
     rm -f "$tmp"
     FAILED=$(( FAILED + 1 ))
@@ -130,12 +134,24 @@ for file in "${FILES[@]}"; do
 done
 
 if [ "$FAILED" -gt 0 ]; then
-  echo "worklog-for-claude: 업데이트 일부 실패 ($FAILED개). 다음 실행 시 재시도합니다." >&2
+  echo "ai-worklog: 업데이트 일부 실패 ($FAILED개). 다음 실행 시 재시도합니다." >&2
   exit 0
+fi
+
+# ── post-update: git hook 재설치 ──────────────────────────────────────────────
+HOOK_SRC="$AI_WORKLOG_DIR/git-hooks/post-commit"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -n "$REPO_ROOT" ] && [ -f "$HOOK_SRC" ]; then
+  HOOK_DST="$REPO_ROOT/.git/hooks/post-commit"
+  mkdir -p "$REPO_ROOT/.git/hooks"
+  if [ -f "$HOOK_DST" ] && ! grep -q "ai-worklog" "$HOOK_DST" 2>/dev/null; then
+    mv "$HOOK_DST" "$HOOK_DST.local"
+  fi
+  cp "$HOOK_SRC" "$HOOK_DST"
+  chmod +x "$HOOK_DST"
 fi
 
 # ── 버전 파일 갱신 ───────────────────────────────────────────────────────────
 echo "$LATEST_SHA" > "$VERSION_FILE"
-echo "$FILES_VERSION" > "$FILES_VERSION_FILE"
 
-echo "worklog-for-claude $INSTALLED_SHA → $LATEST_SHA 업데이트 완료"
+echo "ai-worklog $INSTALLED_SHA → $LATEST_SHA 업데이트 완료 ($UPDATED개 파일)"
