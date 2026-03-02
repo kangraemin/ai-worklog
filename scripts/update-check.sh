@@ -63,7 +63,7 @@ INSTALLED_SHA=$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")
 if [ "$CHECK_ONLY" = true ]; then
   echo "installed: $INSTALLED_SHA"
   echo "latest:    $LATEST_SHA"
-  if [ "$LATEST_SHA" = "$INSTALLED_SHA" ]; then
+  if [ "$LATEST_SHA" = "$INSTALLED_SHA" ] && [ "$FILES_VERSION" = "$INSTALLED_FILES_VERSION" ]; then
     echo "status: up-to-date"
   else
     echo "status: update-available"
