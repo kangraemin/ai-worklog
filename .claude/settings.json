@@ -1,46 +1,6 @@
 {
   "env": {
-    "WORKLOG_TIMING": "each-commit",
-    "WORKLOG_DEST": "notion",
-    "WORKLOG_GIT_TRACK": "true",
-    "WORKLOG_LANG": "ko",
-    "AI_WORKLOG_DIR": "/Users/ram/programming/vibecoding/worklog/.claude",
     "NOTION_DB_ID": "316d4919-b6eb-8170-8adb-f1a8f43c3ece"
   },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/ram/programming/vibecoding/worklog/.claude/hooks/worklog.sh",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/ram/programming/vibecoding/worklog/.claude/hooks/session-end.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/ram/programming/vibecoding/worklog/.claude/hooks/stop.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }

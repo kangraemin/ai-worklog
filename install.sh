@@ -93,8 +93,8 @@ DEST_CHOICE="${DEST_CHOICE:-1}"
 
 case "$DEST_CHOICE" in
   2) WORKLOG_DEST="notion-only"; WORKLOG_GIT_TRACK="false" ;;
-  3) WORKLOG_DEST="git";         WORKLOG_GIT_TRACK="true"  ;;
-  *) WORKLOG_DEST="notion";      WORKLOG_GIT_TRACK="true"  ;;
+  3) WORKLOG_DEST="git" ;;
+  *) WORKLOG_DEST="notion" ;;
 esac
 
 # ── Notion 설정 ──────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ print(json.dumps(data))
 fi
 
 # ── git 추적 ─────────────────────────────────────────────────────────────────
-if [ "$WORKLOG_DEST" = "git" ]; then
+if [ "$WORKLOG_DEST" != "notion-only" ]; then
   header "$(t 'Git 추적' 'Git Tracking')"
 
   echo "  1) $(t '.worklogs/ 를 git에 추적 (기본)' 'Track .worklogs/ in git (default)')"
@@ -502,11 +502,23 @@ PYEOF
 ok "$(t 'settings.json 업데이트 완료' 'settings.json updated')"
 
 # ── .gitignore에 .worklogs/ 추가 (git 미추적 모드) ──────────────────────────
-if [ "$WORKLOG_GIT_TRACK" = "false" ] && [ "$SCOPE" = "local" ]; then
-  GITIGNORE="$(git rev-parse --show-toplevel 2>/dev/null)/.gitignore"
-  if [ -n "$GITIGNORE" ] && ! grep -q "^\.worklogs/" "$GITIGNORE" 2>/dev/null; then
-    echo ".worklogs/" >> "$GITIGNORE"
-    ok "$(t '.gitignore에 .worklogs/ 추가' 'Added .worklogs/ to .gitignore')"
+if [ "$WORKLOG_GIT_TRACK" = "false" ]; then
+  if [ "$SCOPE" = "local" ]; then
+    GITIGNORE="$(git rev-parse --show-toplevel 2>/dev/null)/.gitignore"
+    if [ -n "$GITIGNORE" ] && ! grep -q "^\.worklogs/" "$GITIGNORE" 2>/dev/null; then
+      echo ".worklogs/" >> "$GITIGNORE"
+      ok "$(t '.gitignore에 .worklogs/ 추가' 'Added .worklogs/ to .gitignore')"
+    fi
+  else
+    # 전역: global gitignore에 추가
+    GLOBAL_GITIGNORE=$(git config --global core.excludesFile 2>/dev/null || echo "$HOME/.gitignore_global")
+    GLOBAL_GITIGNORE="${GLOBAL_GITIGNORE/#\~/$HOME}"
+    if ! grep -q "^\.worklogs/" "$GLOBAL_GITIGNORE" 2>/dev/null; then
+      mkdir -p "$(dirname "$GLOBAL_GITIGNORE")"
+      echo ".worklogs/" >> "$GLOBAL_GITIGNORE"
+      git config --global core.excludesFile "$GLOBAL_GITIGNORE"
+      ok "$(t '전역 .gitignore에 .worklogs/ 추가' 'Added .worklogs/ to global .gitignore'): $GLOBAL_GITIGNORE"
+    fi
   fi
 fi
 
