@@ -1,0 +1,33 @@
+{
+  "workflow_phase": "development",
+  "mode": "normal",
+  "planning": {
+    "no_question_streak": 0
+  },
+  "plan_approved": true,
+  "team_name": "",
+  "current_dev_phase": 1,
+  "current_step": 1,
+  "dev_phases": {
+    "1": {
+      "name": "worklog-write",
+      "status": "pending",
+      "folder": "phase-1-worklog-write"
+    },
+    "2": {
+      "name": "hooks",
+      "status": "pending",
+      "folder": "phase-2-hooks"
+    },
+    "3": {
+      "name": "env-combinations",
+      "status": "pending",
+      "folder": "phase-3-env-combinations"
+    }
+  },
+  "verification": {
+    "rounds_passed": 0
+  },
+  "task_dir": "docs/2026-03-14/add-e2e-tests",
+  "active_file": "docs/2026-03-14/add-e2e-tests/.active"
+}
