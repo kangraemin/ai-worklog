@@ -187,6 +187,87 @@ class TestStopUncommittedChanges(_HookBase):
                 pass  # JSON이 아니면 block이 아닌 것
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 3. session-end.sh: collecting 파일 정리
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSessionEndCleanup(_HookBase):
+    """session-end.sh가 collecting 파일을 삭제하는지 검증"""
+
+    def setUp(self):
+        super().setUp()
+        self.session_id = "test-session-abc123"
+        collecting_dir = os.path.join(self.tmp, ".claude", "worklogs", ".collecting")
+        os.makedirs(collecting_dir, exist_ok=True)
+        self.collecting_file = os.path.join(collecting_dir, f"{self.session_id}.jsonl")
+        with open(self.collecting_file, "w") as f:
+            f.write('{"ts":"2026-03-14T10:00:00Z","tool":"Bash","input":{}}\n')
+
+    def _run_session_end(self, session_id):
+        hook_script = os.path.join(PACKAGE_DIR, "hooks", "session-end.sh")
+        stdin_json = json.dumps({"session_id": session_id})
+        return subprocess.run(
+            ["bash", hook_script],
+            input=stdin_json,
+            capture_output=True, text=True,
+            env=self._env(),
+            timeout=10,
+        )
+
+    def test_collecting_file_removed(self):
+        """실행 후 collecting 파일이 삭제됨"""
+        self._run_session_end(self.session_id)
+        self.assertFalse(os.path.exists(self.collecting_file))
+
+    def test_exit_zero(self):
+        """정상 종료 (exit 0)"""
+        r = self._run_session_end(self.session_id)
+        self.assertEqual(r.returncode, 0)
+
+    def test_nonexistent_session_ok(self):
+        """존재하지 않는 session_id로 실행해도 exit 0"""
+        r = self._run_session_end("nonexistent-xyz")
+        self.assertEqual(r.returncode, 0)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 4. post-commit.sh: AI_WORKLOG_DIR 없을 때 graceful 종료
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPostCommitMissingAiDir(_HookBase):
+    """post-commit.sh가 AI_WORKLOG_DIR 없을 때 graceful하게 종료하는지 검증"""
+
+    def setUp(self):
+        super().setUp()
+        self.repo_abs = os.path.realpath(self.repo)
+
+    def _run_post_commit(self, **env_overrides):
+        hook_script = os.path.join(PACKAGE_DIR, "hooks", "post-commit.sh")
+        env = self._env(**env_overrides)
+        # AI_WORKLOG_DIR과 CLAUDECODE가 없어야 함
+        env.pop("AI_WORKLOG_DIR", None)
+        env.pop("CLAUDECODE", None)
+        return subprocess.run(
+            ["bash", hook_script],
+            capture_output=True, text=True,
+            cwd=self.repo,
+            env=env,
+            timeout=15,
+        )
+
+    def test_graceful_exit(self):
+        """AI_WORKLOG_DIR 없어도 exit 0"""
+        r = self._run_post_commit()
+        self.assertEqual(r.returncode, 0)
+
+    def test_no_traceback(self):
+        """stderr에 Traceback 없음"""
+        r = self._run_post_commit()
+        self.assertNotIn("Traceback", r.stderr)
+
+
 if __name__ == "__main__":
     result = unittest.main(verbosity=2, exit=False)
     import sys
