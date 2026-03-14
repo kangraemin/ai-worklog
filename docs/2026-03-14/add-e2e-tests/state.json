@@ -6,8 +6,8 @@
   },
   "plan_approved": true,
   "team_name": "",
-  "current_dev_phase": 2,
-  "current_step": 2,
+  "current_dev_phase": 3,
+  "current_step": 1,
   "dev_phases": {
     "1": {
       "name": "worklog-write",
@@ -16,7 +16,7 @@
     },
     "2": {
       "name": "hooks",
-      "status": "pending",
+      "status": "done",
       "folder": "phase-2-hooks"
     },
     "3": {
