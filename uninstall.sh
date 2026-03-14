@@ -1,208 +1,217 @@
 #!/bin/bash
-# worklog-for-claude uninstaller
-# Usage: ./uninstall.sh [--global | --local | --target <dir>]
+# ai-bouncer uninstall
+# Usage: bash uninstall.sh
 
 set -euo pipefail
 
-PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
-
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
+RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-info()  { echo -e "${BLUE}ℹ${NC}  $*"; }
-ok()    { echo -e "${GREEN}✓${NC}  $*"; }
-warn()  { echo -e "${YELLOW}⚠${NC}  $*"; }
-err()   { echo -e "${RED}✗${NC}  $*" >&2; }
-header(){ echo -e "\n${BOLD}${CYAN}── $* ──${NC}\n"; }
+ok()     { echo -e "${GREEN}✓${NC}  $*"; }
+info()   { echo -e "${BLUE}ℹ${NC}  $*"; }
+warn()   { echo -e "${YELLOW}⚠${NC}  $*"; }
+err()    { echo -e "${RED}✗${NC}  $*"; }
+header() { echo -e "\n${BOLD}── $* ──${NC}\n"; }
 
-# ── 대상 디렉토리 결정 ──────────────────────────────────────────────────────
+header "ai-bouncer 제거"
+
+# 설치 범위 감지: 로컬(.claude/ai-bouncer/) → 글로벌(~/.claude/ai-bouncer/) 순서
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 TARGET_DIR=""
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --global) TARGET_DIR="$HOME/.claude"; shift ;;
-    --local)  TARGET_DIR="$(pwd)/.claude"; shift ;;
-    --target) TARGET_DIR="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-
-if [ -z "$TARGET_DIR" ]; then
-  # AI_WORKLOG_DIR 환경변수에서 감지
-  if [ -n "${AI_WORKLOG_DIR:-}" ]; then
-    TARGET_DIR="$AI_WORKLOG_DIR"
-  else
-    echo "제거 대상을 선택하세요:"
-    echo "  1) 전역 (~/.claude/)"
-    echo "  2) 로컬 (.claude/)"
-    echo ""
-    echo -n "선택 [1]: "
-    read -r CHOICE
-    CHOICE="${CHOICE:-1}"
-    if [ "$CHOICE" = "2" ]; then
-      TARGET_DIR="$(pwd)/.claude"
-    else
-      TARGET_DIR="$HOME/.claude"
-    fi
-  fi
+# 1. 로컬 설치 확인
+if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/.claude/ai-bouncer/manifest.json" ]; then
+  TARGET_DIR="$REPO_ROOT/.claude"
 fi
 
-SETTINGS_FILE="$TARGET_DIR/settings.json"
+# 2. 글로벌 설치 확인 (하위 호환)
+if [ -z "$TARGET_DIR" ] && [ -f "$HOME/.claude/ai-bouncer/manifest.json" ]; then
+  TARGET_DIR="$HOME/.claude"
+fi
 
-if [ ! -f "$SETTINGS_FILE" ]; then
-  err "settings.json 없음: $SETTINGS_FILE"
-  err "worklog-for-claude가 설치되어 있지 않은 것 같습니다."
+if [ -z "$TARGET_DIR" ]; then
+  err "설치된 ai-bouncer를 찾을 수 없습니다."
   exit 1
 fi
 
-header "worklog-for-claude 제거"
-info "대상: $TARGET_DIR"
+BOUNCER_DATA_DIR="$TARGET_DIR/ai-bouncer"
+MANIFEST="$BOUNCER_DATA_DIR/manifest.json"
+info "매니페스트에서 설치 파일 목록 읽는 중... ($MANIFEST)"
 
-# ── settings.json에서 훅 + 환경변수 제거 ────────────────────────────────────
-header "settings.json 정리"
+python3 - "$MANIFEST" "$TARGET_DIR" <<'PYEOF'
+import json, os, sys
 
-$PYTHON - "$SETTINGS_FILE" "$TARGET_DIR" <<'PYEOF'
-import json, sys, os
+manifest_path = sys.argv[1]
+target_dir = sys.argv[2]
 
-settings_file = sys.argv[1]
-target_dir    = sys.argv[2]
+try:
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+except (json.JSONDecodeError, FileNotFoundError) as e:
+    print(f"  ⚠ 매니페스트 읽기 실패: {e}")
+    print("  파일 삭제를 건너뛰고 설정 정리를 계속합니다.")
+    sys.exit(0)
 
-with open(settings_file, encoding='utf-8') as f:
-    cfg = json.load(f)
+removed = 0
+for rel_path in manifest.get('files', []):
+    abs_path = os.path.join(target_dir, rel_path)
+    if os.path.exists(abs_path):
+        os.remove(abs_path)
+        print(f"  삭제: {rel_path}")
+        removed += 1
 
-# ── 훅 제거 ──
-hooks = cfg.get('hooks', {})
-worklog_commands = [
-    f'{target_dir}/hooks/worklog.sh',
-    f'{target_dir}/hooks/session-end.sh',
-    f'{target_dir}/hooks/stop.sh',
-]
-stop_markers = ['stop.sh', '/finish']
-
-removed_hooks = []
-for event in list(hooks.keys()):
-    groups = hooks[event]
-    new_groups = []
-    for group in groups:
-        new_hooks = []
-        for h in group.get('hooks', []):
-            cmd = h.get('command', '').rstrip()
-            prompt = h.get('prompt', '')
-            # command type: worklog_commands에 해당하면 제거
-            if cmd in worklog_commands:
-                continue
-            # prompt/command type Stop hook: 마커 포함하면 제거
-            if event == 'Stop' and any(m in cmd or m in prompt for m in stop_markers):
-                continue
-            new_hooks.append(h)
-        if new_hooks:
-            group['hooks'] = new_hooks
-            new_groups.append(group)
-        else:
-            removed_hooks.append(event)
-    if new_groups:
-        hooks[event] = new_groups
-    else:
-        del hooks[event]
-        removed_hooks.append(event)
-
-for event in set(removed_hooks):
-    print(f'  ✓ {event} 훅 제거')
-
-# ── 환경변수 제거 ──
-env = cfg.get('env', {})
-remove_keys = ['WORKLOG_TIMING', 'WORKLOG_DEST', 'WORKLOG_GIT_TRACK', 'WORKLOG_LANG', 'AI_WORKLOG_DIR']
-for key in remove_keys:
-    if key in env:
-        del env[key]
-        print(f'  ✓ env.{key} 제거')
-
-# NOTION_DB_ID, NOTION_TOKEN은 보존
-
-with open(settings_file, 'w', encoding='utf-8') as f:
-    json.dump(cfg, f, indent=2, ensure_ascii=False)
-    f.write('\n')
-
-print(f'\n  설정 저장: {settings_file}')
+print(f"\n  {removed}개 파일 삭제됨 (백업 파일은 유지)")
 PYEOF
 
-ok "settings.json 정리 완료"
-
-# ── 파일 삭제 ────────────────────────────────────────────────────────────────
-header "파일 제거"
-
-remove_file() {
-  if [ -f "$1" ]; then
-    rm "$1"
-    ok "삭제: $(basename "$1")"
-  fi
+# Stop hook에서 ai-bouncer 블록 제거 (settings.json 정리 전에 수행)
+remove_bouncer_block() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  python3 - "$file" <<'PYEOF'
+import sys
+f = sys.argv[1]
+START = "# --- ai-bouncer start ---"
+END = "# --- ai-bouncer end ---"
+content = open(f, encoding='utf-8').read()
+s = content.find(START)
+e = content.find(END)
+if s == -1 or e == -1:
+    sys.exit(0)
+before = content[:s].rstrip('\n')
+after = content[e + len(END):].lstrip('\n')
+new = (before + '\n\n' + after).strip('\n') + '\n'
+open(f, 'w', encoding='utf-8').write(new)
+print(f"  {f}: ai-bouncer 블록 제거됨")
+PYEOF
 }
 
-remove_file "$TARGET_DIR/scripts/notion-worklog.sh"
-remove_file "$TARGET_DIR/scripts/notion-migrate-worklogs.sh"
-remove_file "$TARGET_DIR/scripts/duration.py"
-remove_file "$TARGET_DIR/scripts/token-cost.py"
-remove_file "$TARGET_DIR/scripts/update-check.sh"
-remove_file "$TARGET_DIR/scripts/worklog-write.sh"
-remove_file "$TARGET_DIR/hooks/worklog.sh"
-remove_file "$TARGET_DIR/hooks/session-end.sh"
-remove_file "$TARGET_DIR/hooks/stop.sh"
-remove_file "$TARGET_DIR/hooks/post-commit.sh"
-remove_file "$TARGET_DIR/commands/worklog.md"
-remove_file "$TARGET_DIR/commands/migrate-worklogs.md"
-remove_file "$TARGET_DIR/commands/update-worklog.md"
-remove_file "$TARGET_DIR/commands/finish.md"
-remove_file "$TARGET_DIR/rules/worklog-rules.md"
-remove_file "$TARGET_DIR/rules/auto-commit-rules.md"
-remove_file "$TARGET_DIR/.version"
-remove_file "$TARGET_DIR/.version-checked"
-
-# 빈 디렉토리 정리
-for dir in scripts hooks commands rules; do
-  if [ -d "$TARGET_DIR/$dir" ] && [ -z "$(ls -A "$TARGET_DIR/$dir" 2>/dev/null)" ]; then
-    rmdir "$TARGET_DIR/$dir"
-    ok "빈 디렉토리 삭제: $dir/"
-  fi
+for settings_file in "$HOME/.claude/settings.json" "$TARGET_DIR/settings.json"; do
+  [ -f "$settings_file" ] || continue
+  python3 -c "
+import json
+cfg = json.load(open('$settings_file'))
+for g in cfg.get('hooks', {}).get('Stop', []):
+    for h in g.get('hooks', []):
+        cmd = h.get('command', '')
+        if cmd: print(cmd)
+" 2>/dev/null | while IFS= read -r hook_path; do
+    remove_bouncer_block "$hook_path"
+  done
 done
 
-# ── 워크로그 데이터 ─────────────────────────────────────────────────────────
-if [ -d ".worklogs" ] || [ -d "$TARGET_DIR/../.worklogs" ]; then
-  echo ""
-  warn "워크로그 데이터(.worklogs/)는 보존됩니다."
-  echo -n "   삭제하시겠습니까? [y/N] "
-  read -r DELETE_DATA
-  if [[ "$DELETE_DATA" =~ ^[yY]$ ]]; then
-    if [ -d ".worklogs" ]; then
-      rm -rf ".worklogs"
-      ok ".worklogs/ 삭제"
-    fi
-  else
-    info ".worklogs/ 보존됨"
-  fi
+# settings.json에서 hook 제거
+SETTINGS_FILE="$TARGET_DIR/settings.json"
+if [ -f "$SETTINGS_FILE" ]; then
+  python3 - "$SETTINGS_FILE" <<'PYEOF'
+import json, sys
+
+settings_file = sys.argv[1]
+
+with open(settings_file) as f:
+    cfg = json.load(f)
+
+BOUNCER_HOOKS = {
+    'plan-gate.sh', 'bash-gate.sh', 'bash-audit.sh',
+    'doc-reminder.sh', 'completion-gate.sh',
+    'subagent-track.sh', 'subagent-cleanup.sh',
+}
+
+def is_bouncer_hook(group):
+    for h in group.get('hooks', []):
+        cmd = h.get('command', '')
+        # 파일명 기준 매칭 (경로 무관)
+        import os
+        if os.path.basename(cmd) in BOUNCER_HOOKS:
+            return True
+    return False
+
+hooks = cfg.get('hooks', {})
+for hook_type in ['PreToolUse', 'PostToolUse', 'Stop', 'SubagentStart', 'SubagentStop']:
+    if hook_type in hooks:
+        original = hooks[hook_type]
+        filtered = [g for g in original if not is_bouncer_hook(g)]
+        if len(filtered) != len(original):
+            hooks[hook_type] = filtered
+            print(f"  {hook_type} hook 제거됨")
+
+# 빈 hook 타입 정리
+hooks = {k: v for k, v in hooks.items() if v}
+if hooks:
+    cfg['hooks'] = hooks
+else:
+    cfg.pop('hooks', None)
+
+# AGENT_TEAMS env 제거
+env = cfg.get('env', {})
+env.pop('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', None)
+if not env:
+    cfg.pop('env', None)
+else:
+    cfg['env'] = env
+
+with open(settings_file, 'w') as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+PYEOF
 fi
 
-# ── .env 정리 ────────────────────────────────────────────────────────────────
-# .env에서 NOTION_TOKEN 제거 여부는 사용자에게 맡김 (다른 용도일 수 있음)
+# CLAUDE.md 블록 제거
+CLAUDE_FILE="$TARGET_DIR/CLAUDE.md"
+if [ -f "$CLAUDE_FILE" ]; then
+  python3 - "$CLAUDE_FILE" <<'PYEOF'
+import sys
 
-# ── 백업 파일 정리 ───────────────────────────────────────────────────────────
-BAK_COUNT=$(find "$TARGET_DIR" -name "*.bak" -maxdepth 2 2>/dev/null | wc -l | tr -d ' ')
-if [ "$BAK_COUNT" -gt 0 ]; then
-  echo ""
-  echo -n "   백업 파일(*.bak) $BAK_COUNT개를 삭제하시겠습니까? [y/N] "
-  read -r DELETE_BAK
-  if [[ "$DELETE_BAK" =~ ^[yY]$ ]]; then
-    find "$TARGET_DIR" -name "*.bak" -maxdepth 2 -delete
-    ok "백업 파일 삭제"
-  fi
+claude_file = sys.argv[1]
+START = "# --- ai-bouncer-rule start ---"
+END   = "# --- ai-bouncer-rule end ---"
+
+content = open(claude_file, encoding='utf-8').read()
+s = content.find(START)
+e = content.find(END)
+
+if s == -1 or e == -1:
+    print("  CLAUDE.md 블록 없음 (no-op)")
+    sys.exit(0)
+
+# 마커 포함 블록 제거, 앞뒤 빈줄 정리 (섹션 간 이중 개행 보존)
+before = content[:s].rstrip('\n')
+after  = content[e + len(END):].lstrip('\n')
+new_content = (before + '\n\n' + after).strip('\n')
+if new_content:
+    new_content += '\n'
+else:
+    # CLAUDE.md가 bouncer 규칙만 있었으면 파일 삭제
+    import os
+    os.remove(claude_file)
+    print("  CLAUDE.md 삭제됨 (bouncer 규칙만 있었음)")
+    sys.exit(0)
+
+open(claude_file, 'w', encoding='utf-8').write(new_content)
+print("  CLAUDE.md ai-bouncer 규칙 블록 제거됨")
+PYEOF
 fi
 
-# ── 완료 ─────────────────────────────────────────────────────────────────────
-header "제거 완료"
-ok "worklog-for-claude가 제거되었습니다."
-info "settings.json의 NOTION_DB_ID, NOTION_TOKEN은 보존됩니다."
-info "필요하면 수동으로 삭제하세요."
+# 빈 디렉토리 정리
+for dir in "$TARGET_DIR/hooks/lib" "$TARGET_DIR/hooks" \
+           "$TARGET_DIR/agents/guides" "$TARGET_DIR/agents" \
+           "$TARGET_DIR/skills/dev-bounce" "$TARGET_DIR/skills"; do
+  rmdir "$dir" 2>/dev/null || true
+done
+
+# 매니페스트/config 삭제
+rm -f "$BOUNCER_DATA_DIR/manifest.json"
+rm -f "$BOUNCER_DATA_DIR/config.json"
+rmdir "$BOUNCER_DATA_DIR" 2>/dev/null || true
+
+# 프로젝트 루트의 update.sh / uninstall.sh 삭제
+if [ -n "$REPO_ROOT" ]; then
+  rm -f "$REPO_ROOT/update.sh"
+  rm -f "$REPO_ROOT/uninstall.sh"
+fi
+
+echo ""
+ok "ai-bouncer 제거 완료"
