@@ -183,7 +183,7 @@ print('\n')
   echo -e "${_G}✓${_N}  SessionStart hook 등록" >&2
 }
 
-_register_session_start "$HOME/.claude/settings.json"
+_register_session_start "$HOME/.claude/settings.json" || true
 
 # ── post-update: git hook 재설치 ──────────────────────────────────────────────
 HOOK_SRC="$AI_WORKLOG_DIR/git-hooks/post-commit"
