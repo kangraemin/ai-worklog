@@ -66,18 +66,20 @@ if [ ! -f "$WRITE_SCRIPT" ]; then
 fi
 
 # ── 환경변수 로드 ────────────────────────────────────────────────────────────
-# settings.json의 env를 읽어서 export
+# settings.json의 env를 읽어서 export (eval 없이 안전하게 로드)
 SETTINGS_FILE="$AI_WORKLOG_DIR/settings.json"
 if [ -f "$SETTINGS_FILE" ]; then
-  eval "$($PYTHON -c "
-import json, sys
+  while IFS='=' read -r key value; do
+    [ -n "$key" ] && export "$key=$value"
+  done < <(_SETTINGS_PATH="$SETTINGS_FILE" $PYTHON -c "
+import json, sys, os
 try:
-    cfg = json.load(open('$SETTINGS_FILE'))
+    cfg = json.load(open(os.environ.get('_SETTINGS_PATH', '')))
     for k, v in cfg.get('env', {}).items():
-        print(f'export {k}=\"{v}\"')
+        print(f'{k}={v}')
 except:
     pass
-" 2>/dev/null || true)"
+" 2>/dev/null || true)
 fi
 
 # ── 컨텍스트 수집 ────────────────────────────────────────────────────────────

@@ -75,18 +75,24 @@ fi
 # 새 버전의 update-check.sh로 교체 후 재실행해서 전체 파일을 받는다.
 SELF_SCRIPT="$AI_WORKLOG_DIR/scripts/update-check.sh"
 if [ "${_UPDATE_BOOTSTRAPPED:-}" != "1" ]; then
-  SELF_TMP=$(mktemp)
+  SELF_TMP=$(mktemp) || { echo "worklog-for-claude: mktemp failed" >&2; exit 0; }
+  trap 'rm -f "$SELF_TMP"' EXIT
   if curl -sf --max-time 10 "$RAW_BASE/scripts/update-check.sh" -o "$SELF_TMP" 2>/dev/null; then
-    if ! cmp -s "$SELF_TMP" "$SELF_SCRIPT"; then
-      mv "$SELF_TMP" "$SELF_SCRIPT"
-      chmod +x "$SELF_SCRIPT"
-      export _UPDATE_BOOTSTRAPPED=1
-      exec bash "$SELF_SCRIPT" --force
+    # 무결성 검증: 비어있지 않고, 유효한 bash 구문이어야 함
+    if [ -s "$SELF_TMP" ] && bash -n "$SELF_TMP" 2>/dev/null; then
+      if ! cmp -s "$SELF_TMP" "$SELF_SCRIPT"; then
+        mv "$SELF_TMP" "$SELF_SCRIPT"
+        chmod +x "$SELF_SCRIPT"
+        trap - EXIT
+        export _UPDATE_BOOTSTRAPPED=1
+        exec bash "$SELF_SCRIPT" --force
+      fi
+    else
+      echo "worklog-for-claude: 다운로드 파일 검증 실패, 업데이트 건너뜀" >&2
     fi
-    rm -f "$SELF_TMP"
-  else
-    rm -f "$SELF_TMP"
   fi
+  rm -f "$SELF_TMP"
+  trap - EXIT
 fi
 
 # ── 파일 다운로드 + 교체 ─────────────────────────────────────────────────────
@@ -124,8 +130,14 @@ for file in "${FILES[@]}"; do
   dst="$AI_WORKLOG_DIR/$file"
   mkdir -p "$(dirname "$dst")"
 
-  tmp=$(mktemp)
-  if curl -sf --max-time 10 "$RAW_BASE/$file" -o "$tmp" 2>/dev/null; then
+  tmp=$(mktemp) || { FAILED=$(( FAILED + 1 )); continue; }
+  if curl -sf --max-time 10 "$RAW_BASE/$file" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+    # .sh 파일이면 bash 구문 검증
+    if [[ "$file" == *.sh ]] && ! bash -n "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      FAILED=$(( FAILED + 1 ))
+      continue
+    fi
     mv "$tmp" "$dst"
     chmod +x "$dst" 2>/dev/null || true
     UPDATED=$(( UPDATED + 1 ))
