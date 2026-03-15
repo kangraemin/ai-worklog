@@ -124,8 +124,11 @@ FILES=(
   "install.sh"
 )
 
+_G='\033[0;32m' _D='\033[2m' _R='\033[0;31m' _B='\033[1m' _N='\033[0m'
+
 FAILED=0
 UPDATED=0
+UNCHANGED=0
 for file in "${FILES[@]}"; do
   dst="$AI_WORKLOG_DIR/$file"
   mkdir -p "$(dirname "$dst")"
@@ -135,14 +138,23 @@ for file in "${FILES[@]}"; do
     # .sh 파일이면 bash 구문 검증
     if [[ "$file" == *.sh ]] && ! bash -n "$tmp" 2>/dev/null; then
       rm -f "$tmp"
+      echo -e "${_R}✗${_N}  ${file} (구문 오류)" >&2
       FAILED=$(( FAILED + 1 ))
       continue
     fi
-    mv "$tmp" "$dst"
-    chmod +x "$dst" 2>/dev/null || true
-    UPDATED=$(( UPDATED + 1 ))
+    if [ -f "$dst" ] && cmp -s "$tmp" "$dst"; then
+      echo -e "${_D}·  ${file}${_N}" >&2
+      UNCHANGED=$(( UNCHANGED + 1 ))
+      rm -f "$tmp"
+    else
+      mv "$tmp" "$dst"
+      chmod +x "$dst" 2>/dev/null || true
+      echo -e "${_G}✓${_N}  ${file}" >&2
+      UPDATED=$(( UPDATED + 1 ))
+    fi
   else
     rm -f "$tmp"
+    echo -e "${_R}✗${_N}  ${file}" >&2
     FAILED=$(( FAILED + 1 ))
   fi
 done
@@ -151,6 +163,27 @@ if [ "$FAILED" -gt 0 ]; then
   echo "worklog-for-claude: 업데이트 일부 실패 ($FAILED개). 다음 실행 시 재시도합니다." >&2
   exit 0
 fi
+
+# ── post-update: SessionStart hook 등록 ──────────────────────────────────────
+_register_session_start() {
+  local sf="$1"
+  [ -f "$sf" ] || return 0
+  local cmd="$AI_WORKLOG_DIR/scripts/update-check.sh"
+  grep -q "update-check.sh" "$sf" 2>/dev/null && return 0
+  $PYTHON -c "
+import json, sys
+sf, cmd = sys.argv[1], sys.argv[2]
+cfg = json.load(open(sf))
+hooks = cfg.setdefault('hooks', {})
+ss = hooks.setdefault('SessionStart', [])
+ss.append({'hooks': [{'type': 'command', 'command': cmd, 'timeout': 15, 'async': True}]})
+json.dump(cfg, open(sf, 'w'), indent=2, ensure_ascii=False)
+print('\n')
+" "$sf" "$cmd" 2>/dev/null
+  echo -e "${_G}✓${_N}  SessionStart hook 등록" >&2
+}
+
+_register_session_start "$HOME/.claude/settings.json"
 
 # ── post-update: git hook 재설치 ──────────────────────────────────────────────
 HOOK_SRC="$AI_WORKLOG_DIR/git-hooks/post-commit"
@@ -168,4 +201,5 @@ fi
 # ── 버전 파일 갱신 ───────────────────────────────────────────────────────────
 echo "$LATEST_SHA" > "$VERSION_FILE"
 
+echo -e "\n${_G}✓${_N}  ${_B}worklog-for-claude${_N} $INSTALLED_SHA → $LATEST_SHA — ${_G}${UPDATED}개 업데이트${_N}, ${_D}${UNCHANGED}개 변경 없음${_N}" >&2
 echo "worklog-for-claude $INSTALLED_SHA → $LATEST_SHA 업데이트 완료 ($UPDATED개 파일)"

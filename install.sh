@@ -485,8 +485,9 @@ hooks = cfg.setdefault('hooks', {})
 
 # 훅 정의: (이벤트, command, timeout, async)
 hook_defs = [
-    ('PostToolUse', f'{target_dir}/hooks/worklog.sh',     5,  True),
-    ('SessionEnd',  f'{target_dir}/hooks/session-end.sh', 15, False),
+    ('PostToolUse',  f'{target_dir}/hooks/worklog.sh',            5,  True),
+    ('SessionStart', f'{target_dir}/scripts/update-check.sh',     15, True),
+    ('SessionEnd',   f'{target_dir}/hooks/session-end.sh',        15, False),
 ]
 
 def add_command_hook(event, command, timeout, is_async):
