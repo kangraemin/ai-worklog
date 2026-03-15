@@ -8,5 +8,4 @@ __pycache__/
 .version
 .version-checked
 .claude/
-uninstall.sh
 update.sh

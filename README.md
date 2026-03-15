@@ -69,7 +69,7 @@ When you're deep in a Claude Code session, it's easy to lose track of what you'v
 
 - **Non-destructive install** — Preserves existing git hooks via chaining.
 - **Bilingual** — Full Korean and English support (`WORKLOG_LANG`).
-- **Self-updating** — Built-in version check with `/update-worklog`.
+- **Self-updating** — Automatic version check on session start, or manual with `/update-worklog`.
 - **Global or local** — Install once for all projects, or per-repo.
 - **Bulk migration** — Move existing markdown worklogs to Notion with `/migrate-worklogs`.
 
@@ -84,7 +84,7 @@ When you're deep in a Claude Code session, it's easy to lose track of what you'v
 | [Claude Code](https://claude.com/claude-code) | AI coding assistant (CLI) |
 | `python3` | Token/cost calculation |
 | `curl` | Notion API, update checks |
-| `jq` | JSON processing |
+| `jq` *(optional)* | JSON processing (session cleanup) |
 
 ### Install
 
@@ -164,6 +164,7 @@ Commits + pushes + writes worklog — all in one step. Great for wrapping up a s
 /migrate-worklogs              # dry-run preview
 /migrate-worklogs --all        # migrate all .md files
 /migrate-worklogs --date 2026-03-01  # specific date only
+/migrate-worklogs --all --delete-after  # migrate and delete source files
 ```
 
 ### Self-update
@@ -301,7 +302,7 @@ Token and cost deltas are calculated by parsing Claude Code's official JSONL log
 <details>
 <summary><strong>Does it slow down my commits?</strong></summary>
 
-The post-commit hook runs `claude -p` in the background. Your commit completes immediately. If AI summary generation fails, it falls back to an auto-generated format using the commit message.
+Inside a Claude Code session, the hook writes a pending marker and exits immediately — your commit is never blocked. Outside Claude Code, it runs `claude -p` synchronously but completes in seconds. If AI summary generation fails, it falls back to an auto-generated format using the commit message.
 </details>
 
 <details>
