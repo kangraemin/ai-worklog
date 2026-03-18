@@ -19,13 +19,13 @@ import sys
 from datetime import datetime, timezone
 
 # 모델별 단가 (USD per 1M tokens)
-# https://docs.anthropic.com/en/docs/about-claude/models
+# https://www.anthropic.com/pricing — 마지막 확인: 2026-03-18
 PRICING = {
     "claude-opus-4-6": {
-        "input": 15.0,
-        "output": 75.0,
-        "cache_read": 1.5,
-        "cache_creation": 18.75,
+        "input": 5.0,
+        "output": 25.0,
+        "cache_read": 0.50,
+        "cache_creation": 6.25,
     },
     "claude-sonnet-4-6": {
         "input": 3.0,
@@ -34,10 +34,10 @@ PRICING = {
         "cache_creation": 3.75,
     },
     "claude-haiku-4-5": {
-        "input": 0.80,
-        "output": 4.0,
-        "cache_read": 0.08,
-        "cache_creation": 1.0,
+        "input": 1.0,
+        "output": 5.0,
+        "cache_read": 0.10,
+        "cache_creation": 1.25,
     },
 }
 
