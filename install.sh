@@ -285,26 +285,9 @@ case "$TIMING_CHOICE" in
   *) WORKLOG_TIMING="stop" ;;
 esac
 
-# ── 자동 커밋 ─────────────────────────────────────────────────────────────────
+# ── 자동 커밋 (deprecated) ────────────────────────────────────────────────────
+# stop hook에서 block하지 않음. 커밋은 워크플로우 도구(ai-bouncer 등)나 사용자가 직접 관리.
 AUTO_COMMIT="false"
-
-if [ "$WORKLOG_TIMING" = "stop" ]; then
-  header "$(t '자동 커밋' 'Auto-Commit')"
-
-  info "$(t 'Claude 작업 완료 시 미커밋 변경사항을 자동 커밋합니다.' \
-          'Automatically commits uncommitted changes when Claude finishes.')"
-  echo ""
-  echo "  1) $(t '사용 (추천)' 'Enable (recommended)')"
-  echo "  2) $(t '사용 안 함' 'Disable')"
-  echo ""
-  printf "$(t '선택' 'Select') [1]: "
-  read -r AC_CHOICE
-  AC_CHOICE="${AC_CHOICE:-1}"
-
-  if [ "$AC_CHOICE" != "2" ]; then
-    AUTO_COMMIT="true"
-  fi
-fi
 
 # ── 파일 복사 ────────────────────────────────────────────────────────────────
 header "$(t '파일 설치' 'Installing Files')"
@@ -522,20 +505,9 @@ def remove_old_stop_hooks():
     if not hooks['Stop']:
         hooks.pop('Stop', None)
 
-if auto_commit == 'true':
-    remove_old_stop_hooks()
-    stop_command = f'{target_dir}/hooks/stop.sh'
-    stop_hooks = hooks.setdefault('Stop', [])
-    stop_hooks.append({
-        'hooks': [{
-            'type': 'command',
-            'command': stop_command,
-            'timeout': 10,
-        }]
-    })
-    print(f'  ✓ Stop hook added: command type (stop.sh)')
-else:
-    remove_old_stop_hooks()
+# stop hook은 더 이상 block하지 않음 — 기존 stop hook 제거만 수행
+remove_old_stop_hooks()
+print(f'  ✓ Old stop hooks removed (no longer blocking on session end)')
 
 # 저장
 with open(settings_file, 'w', encoding='utf-8') as f:
@@ -634,7 +606,7 @@ echo "  ├─ $(t '언어' 'Language'):  $WORKLOG_LANG"
 if [ -n "$NOTION_DB_ID" ]; then
 echo "  ├─ Notion DB: $NOTION_DB_ID"
 fi
-echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse, SessionEnd$([ "$AUTO_COMMIT" = "true" ] && echo ", Stop (stop.sh)")"
+echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse, SessionEnd"
 echo "  ├─ $(t 'Git Hook' 'Git Hook'):  post-commit ($(t '터미널 커밋 시 워크로그' 'worklog on terminal commits'))"
 echo "  └─ $(t '자동 커밋' 'Auto-Commit'): $([ "$AUTO_COMMIT" = "true" ] && t '사용 (/finish)' 'Enabled (/finish)' || t '사용 안 함' 'Disabled')"
 
