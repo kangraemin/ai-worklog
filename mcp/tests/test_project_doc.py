@@ -243,3 +243,50 @@ def test_tc56_update_append_mode(tmp_project):
     content = (tmp_project / "PROJECT.md").read_text()
     assert "Python 선택: 익숙해서" in content  # 기존 내용 유지
     assert "새 결정 추가" in content  # 새 내용 추가
+
+
+# ── analyze_gaps 개선 TC ────────────────────────────────────
+
+def test_tc_g1_fix_commit_gap(tmp_project):
+    """TC-G1: fix: 커밋 → [해결한 문제들] gap 감지"""
+    (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    import subprocess
+    (tmp_project / "bug.py").write_text("# fix")
+    subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "fix: 버그 수정"], cwd=tmp_project, capture_output=True)
+    result = analyze_gaps(str(tmp_project))
+    assert any("해결한 문제들" in g for g in result)
+
+
+def test_tc_g2_refactor_commit_gap(tmp_project):
+    """TC-G2: refactor: 커밋 → [구조] gap 감지"""
+    (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    import subprocess
+    (tmp_project / "refactored.py").write_text("# refactor")
+    subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "refactor: 코드 정리"], cwd=tmp_project, capture_output=True)
+    result = analyze_gaps(str(tmp_project))
+    assert any("구조" in g for g in result)
+
+
+def test_tc_g3_empty_section_gap(tmp_project):
+    """TC-G3: 섹션이 비어있으면 gap 반환"""
+    empty_md = "# 프로젝트\n\n## 이게 뭔가\n\n## 왜 만들었나\n\n## 구조\n\n## 기술 스택\n\n## 주요 결정들\n\n## 해결한 문제들\n\n## 지금 상태\n"
+    (tmp_project / "PROJECT.md").write_text(empty_md)
+    import subprocess
+    (tmp_project / "a.py").write_text("x")
+    subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "chore: init"], cwd=tmp_project, capture_output=True)
+    result = analyze_gaps(str(tmp_project))
+    assert any("섹션이 비어있음" in g for g in result)
+
+
+def test_tc_g4_docs_commit_no_gap(tmp_project):
+    """TC-G4: 최근 커밋에 PROJECT.md 수정이 있으면 gap 없음"""
+    (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    import subprocess
+    subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "docs: PROJECT.md 업데이트"], cwd=tmp_project, capture_output=True)
+    result = analyze_gaps(str(tmp_project))
+    # docs 커밋 이후엔 커밋 타입 기반 gap 없어야 함
+    assert not any("미반영 커밋" in g for g in result)

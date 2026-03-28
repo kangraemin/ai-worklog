@@ -77,6 +77,15 @@ def create_project_doc(project_path: str, sections: dict[str, str]) -> str:
     return f"Created {doc_path}"
 
 
+COMMIT_SECTION_MAP = {
+    "feat:": ["주요 결정들", "지금 상태"],
+    "fix:": ["해결한 문제들"],
+    "refactor:": ["구조", "기술 스택"],
+    "chore:": ["기술 스택"],
+    "perf:": ["기술 스택", "해결한 문제들"],
+}
+
+
 def analyze_gaps(project_path: str) -> list[str]:
     """최근 git 커밋과 PROJECT.md를 비교해 반영 안 된 내용(gap)을 반환한다.
 
@@ -96,21 +105,41 @@ def analyze_gaps(project_path: str) -> list[str]:
         return []
 
     content = doc_path.read_text(encoding="utf-8")
+    sections = _parse_sections(content)
     gaps: list[str] = []
 
-    # feat: 커밋이 있는데 최근 PROJECT.md 수정이 없으면 gap
-    feat_commits = [c for c in commits if "feat:" in c.lower()]
-    doc_commits = [c for c in commits if "docs:" in c.lower() or "PROJECT.md" in c]
+    # 빈 섹션 감지
+    for section_name in SECTIONS:
+        if not sections.get(section_name):
+            gaps.append(f"[{section_name}] 섹션이 비어있음")
 
-    if feat_commits and not doc_commits:
-        gap_msgs = [c.split(" ", 1)[1] if " " in c else c for c in feat_commits[:3]]
-        gaps.append(f"[주요 결정들 / 지금 상태] feat 커밋 미반영: {', '.join(gap_msgs)}")
+    # PROJECT.md가 최근 커밋에서 수정됐으면 gap 없음으로 간주
+    doc_recently_updated = any(
+        "PROJECT.md" in c or "docs:" in c.lower()
+        for c in commits[:5]
+    )
+    if doc_recently_updated:
+        return [g for g in gaps if "섹션이 비어있음" in g]
 
-    # 최근 변경 파일 중 구조에 없는 것
+    # 커밋 타입별 gap 감지
+    section_gaps: dict[str, list[str]] = {}
+    for commit in commits:
+        msg = commit.split(" ", 1)[1] if " " in commit else commit
+        for prefix, target_sections in COMMIT_SECTION_MAP.items():
+            if msg.lower().startswith(prefix):
+                for sec in target_sections:
+                    section_gaps.setdefault(sec, []).append(msg)
+                break
+
+    for sec, msgs in section_gaps.items():
+        gap_msg = f"[{sec}] 미반영 커밋: {', '.join(msgs[:3])}"
+        if gap_msg not in gaps:
+            gaps.append(gap_msg)
+
+    # 최근 변경 파일 중 구조 섹션에 없는 것
     changed = get_recent_changed_files(str(path), n=5)
-    new_files = [f for f in changed if f.endswith(".py") or f.endswith(".ts")]
+    new_files = [f for f in changed if f.endswith((".py", ".ts", ".js", ".go", ".rs"))]
     if new_files:
-        sections = _parse_sections(content)
         structure = sections.get("구조", "")
         unmentioned = [f for f in new_files if Path(f).name not in structure]
         if unmentioned:

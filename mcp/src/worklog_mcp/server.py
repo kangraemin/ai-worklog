@@ -6,6 +6,7 @@ from worklog_mcp.tools.project_doc import (
     analyze_gaps,
     update_project_doc,
 )
+from worklog_mcp.tools.notion import write_worklog_to_notion
 
 mcp = FastMCP("worklog-mcp")
 
@@ -15,6 +16,7 @@ mcp.tool()(read_project_doc)
 mcp.tool()(create_project_doc)
 mcp.tool()(analyze_gaps)
 mcp.tool()(update_project_doc)
+mcp.tool()(write_worklog_to_notion)
 
 
 def main():
