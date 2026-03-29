@@ -108,12 +108,13 @@ def test_tc40_create_special_chars(tmp_project):
     assert special in content
 
 
-# ── analyze_gaps ──────────────────────────────────────────
+# ── analyze_gaps (dict 기반) ───────────────────────────────
 
 def test_tc41_analyze_no_project_md(tmp_project_with_commits):
-    """TC-41: PROJECT.md 없으면 ["PROJECT.md 없음"] 반환"""
+    """TC-41: PROJECT.md 없으면 project_doc=None"""
     result = analyze_gaps(str(tmp_project_with_commits))
-    assert any("PROJECT.md" in gap for gap in result)
+    assert isinstance(result, dict)
+    assert result["project_doc"] is None
 
 
 def test_tc42_analyze_non_git(tmp_non_git):
@@ -124,63 +125,58 @@ def test_tc42_analyze_non_git(tmp_non_git):
 
 
 def test_tc43_analyze_no_commits(tmp_project):
-    """TC-43: 커밋 없으면 빈 gaps 반환"""
+    """TC-43: 커밋 없으면 빈 commits 반환"""
     (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     result = analyze_gaps(str(tmp_project))
-    assert isinstance(result, list)
-    assert len(result) == 0
+    assert isinstance(result, dict)
+    assert result["commits"] == []
 
 
 def test_tc44_analyze_new_file_gap(tmp_project_with_commits):
-    """TC-44: 새 파일 추가됐는데 구조 섹션 미반영 → gap 감지"""
-    (tmp_project_with_commits / "PROJECT.md").write_text(
-        SAMPLE_PROJECT_MD.replace("단순한 구조", "")
-    )
-    # 새 파일 커밋
-    (tmp_project_with_commits / "new_module.py").write_text("# new")
+    """TC-44: 새 파일 추가 커밋 → changed_files에 포함"""
+    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     import subprocess
+    (tmp_project_with_commits / "new_module.py").write_text("# new")
     subprocess.run(["git", "add", "."], cwd=tmp_project_with_commits, capture_output=True)
     subprocess.run(["git", "commit", "-m", "feat: new_module 추가"], cwd=tmp_project_with_commits, capture_output=True)
     result = analyze_gaps(str(tmp_project_with_commits))
-    assert isinstance(result, list)
+    assert isinstance(result, dict)
+    assert len(result["commits"]) > 0
 
 
-def test_tc45_analyze_feat_commit_gap(tmp_project_with_commits):
-    """TC-45: feat: 커밋이 있는데 문서 미반영 → gap 감지"""
+def test_tc45_analyze_feat_commit(tmp_project_with_commits):
+    """TC-45: feat: 커밋 → commits에 포함"""
     (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     import subprocess
     (tmp_project_with_commits / "feature.py").write_text("# feature")
     subprocess.run(["git", "add", "."], cwd=tmp_project_with_commits, capture_output=True)
     subprocess.run(["git", "commit", "-m", "feat: 새 기능 추가"], cwd=tmp_project_with_commits, capture_output=True)
     result = analyze_gaps(str(tmp_project_with_commits))
-    assert isinstance(result, list)
+    assert any("feat" in c for c in result["commits"])
 
 
-def test_tc46_analyze_no_gaps(tmp_project_with_commits):
-    """TC-46: PROJECT.md가 최신이면 빈 gaps 반환"""
-    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
-    import subprocess
-    subprocess.run(["git", "add", "."], cwd=tmp_project_with_commits, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "docs: PROJECT.md 업데이트"], cwd=tmp_project_with_commits, capture_output=True)
-    result = analyze_gaps(str(tmp_project_with_commits))
-    assert isinstance(result, list)
-
-
-def test_tc47_analyze_returns_list(tmp_project_with_commits):
-    """TC-47: 반환 타입 list[str]"""
+def test_tc46_analyze_has_project_doc(tmp_project_with_commits):
+    """TC-46: PROJECT.md 있으면 project_doc에 내용 포함"""
     (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     result = analyze_gaps(str(tmp_project_with_commits))
-    assert isinstance(result, list)
-    for item in result:
-        assert isinstance(item, str)
+    assert result["project_doc"] is not None
+    assert "테스트 프로젝트" in result["project_doc"]
 
 
-def test_tc48_analyze_gap_message_specific(tmp_project_with_commits):
-    """TC-48: gap 메시지가 구체적"""
+def test_tc47_analyze_returns_dict(tmp_project_with_commits):
+    """TC-47: 반환 타입 dict, 필수 키 존재"""
+    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     result = analyze_gaps(str(tmp_project_with_commits))
-    # PROJECT.md 없을 때 반환하는 메시지가 구체적인지
-    assert len(result) > 0
-    assert len(result[0]) > 5  # 단순 빈 문자열 아님
+    assert isinstance(result, dict)
+    for key in ["project_doc", "diff_mode", "diff", "changed_files", "commits", "line_count"]:
+        assert key in result, f"Missing key: {key}"
+
+
+def test_tc48_analyze_diff_mode(tmp_project_with_commits):
+    """TC-48: diff_mode가 full 또는 summary"""
+    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    result = analyze_gaps(str(tmp_project_with_commits))
+    assert result["diff_mode"] in ("full", "summary")
 
 
 # ── update_project_doc ─────────────────────────────────────
@@ -245,48 +241,47 @@ def test_tc56_update_append_mode(tmp_project):
     assert "새 결정 추가" in content  # 새 내용 추가
 
 
-# ── analyze_gaps 개선 TC ────────────────────────────────────
+# ── analyze_gaps 새 TC (diff 기반) ─────────────────────────
 
-def test_tc_g1_fix_commit_gap(tmp_project):
-    """TC-G1: fix: 커밋 → [해결한 문제들] gap 감지"""
+def test_tc_g1_fix_commit_in_commits(tmp_project):
+    """TC-G1: fix: 커밋 → commits에 포함"""
     (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     import subprocess
     (tmp_project / "bug.py").write_text("# fix")
     subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
     subprocess.run(["git", "commit", "-m", "fix: 버그 수정"], cwd=tmp_project, capture_output=True)
     result = analyze_gaps(str(tmp_project))
-    assert any("해결한 문제들" in g for g in result)
+    assert any("fix" in c for c in result["commits"])
 
 
-def test_tc_g2_refactor_commit_gap(tmp_project):
-    """TC-G2: refactor: 커밋 → [구조] gap 감지"""
+def test_tc_g2_refactor_commit_in_commits(tmp_project):
+    """TC-G2: refactor: 커밋 → commits에 포함"""
     (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     import subprocess
     (tmp_project / "refactored.py").write_text("# refactor")
     subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
     subprocess.run(["git", "commit", "-m", "refactor: 코드 정리"], cwd=tmp_project, capture_output=True)
     result = analyze_gaps(str(tmp_project))
-    assert any("구조" in g for g in result)
+    assert any("refactor" in c for c in result["commits"])
 
 
-def test_tc_g3_empty_section_gap(tmp_project):
-    """TC-G3: 섹션이 비어있으면 gap 반환"""
-    empty_md = "# 프로젝트\n\n## 이게 뭔가\n\n## 왜 만들었나\n\n## 구조\n\n## 기술 스택\n\n## 주요 결정들\n\n## 해결한 문제들\n\n## 지금 상태\n"
-    (tmp_project / "PROJECT.md").write_text(empty_md)
+def test_tc_g3_full_diff_mode(tmp_project):
+    """TC-G3: 500줄 이하 diff → full 모드"""
+    (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     import subprocess
-    (tmp_project / "a.py").write_text("x")
+    (tmp_project / "a.py").write_text("x = 1")
     subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
     subprocess.run(["git", "commit", "-m", "chore: init"], cwd=tmp_project, capture_output=True)
     result = analyze_gaps(str(tmp_project))
-    assert any("섹션이 비어있음" in g for g in result)
+    assert result["diff_mode"] == "full"
+    assert result["line_count"] <= 500
 
 
-def test_tc_g4_docs_commit_no_gap(tmp_project):
-    """TC-G4: 최근 커밋에 PROJECT.md 수정이 있으면 gap 없음"""
+def test_tc_g4_line_count_is_int(tmp_project):
+    """TC-G4: line_count가 정수"""
     (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
     import subprocess
     subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "docs: PROJECT.md 업데이트"], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "docs: 업데이트"], cwd=tmp_project, capture_output=True)
     result = analyze_gaps(str(tmp_project))
-    # docs 커밋 이후엔 커밋 타입 기반 gap 없어야 함
-    assert not any("미반영 커밋" in g for g in result)
+    assert isinstance(result["line_count"], int)

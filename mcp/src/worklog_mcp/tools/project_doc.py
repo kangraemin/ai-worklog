@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from worklog_mcp.utils.git import get_recent_commits, get_recent_changed_files
+from worklog_mcp.utils.git import get_recent_commits, get_recent_changed_files, get_diff
 
 SECTIONS = ["이게 뭔가", "왜 만들었나", "구조", "기술 스택", "주요 결정들", "해결한 문제들", "지금 상태"]
 
@@ -77,75 +77,38 @@ def create_project_doc(project_path: str, sections: dict[str, str]) -> str:
     return f"Created {doc_path}"
 
 
-COMMIT_SECTION_MAP = {
-    "feat:": ["주요 결정들", "지금 상태"],
-    "fix:": ["해결한 문제들"],
-    "refactor:": ["구조", "기술 스택"],
-    "chore:": ["기술 스택"],
-    "perf:": ["기술 스택", "해결한 문제들"],
-}
-
-
-def analyze_gaps(project_path: str) -> list[str]:
-    """최근 git 커밋과 PROJECT.md를 비교해 반영 안 된 내용(gap)을 반환한다.
+def analyze_gaps(project_path: str) -> dict:
+    """PROJECT.md와 최근 변경사항을 반환한다. Claude가 gap을 판단한다.
 
     Args:
         project_path: 프로젝트 루트 디렉토리 경로
+
+    Returns:
+        {
+            "project_doc": str | None,  # 현재 PROJECT.md 내용 (없으면 None)
+            "diff_mode": "full" | "summary",
+            "diff": str,                # full 모드일 때 실제 diff
+            "changed_files": list[str],
+            "commits": list[str],
+            "line_count": int,
+        }
     """
     path = Path(project_path).resolve()
 
-    # git repo 확인 (에러 전파)
-    commits = get_recent_commits(str(path), n=20)
+    # git repo 확인 + diff 가져오기 (에러 전파)
+    diff_info = get_diff(str(path), n=10)
 
     doc_path = path / "PROJECT.md"
-    if not doc_path.exists():
-        return ["PROJECT.md 없음 — create_project_doc으로 먼저 생성하세요"]
+    project_doc = doc_path.read_text(encoding="utf-8") if doc_path.exists() else None
 
-    if not commits:
-        return []
-
-    content = doc_path.read_text(encoding="utf-8")
-    sections = _parse_sections(content)
-    gaps: list[str] = []
-
-    # 빈 섹션 감지
-    for section_name in SECTIONS:
-        if not sections.get(section_name):
-            gaps.append(f"[{section_name}] 섹션이 비어있음")
-
-    # PROJECT.md가 최근 커밋에서 수정됐으면 gap 없음으로 간주
-    doc_recently_updated = any(
-        "PROJECT.md" in c or "docs:" in c.lower()
-        for c in commits[:5]
-    )
-    if doc_recently_updated:
-        return [g for g in gaps if "섹션이 비어있음" in g]
-
-    # 커밋 타입별 gap 감지
-    section_gaps: dict[str, list[str]] = {}
-    for commit in commits:
-        msg = commit.split(" ", 1)[1] if " " in commit else commit
-        for prefix, target_sections in COMMIT_SECTION_MAP.items():
-            if msg.lower().startswith(prefix):
-                for sec in target_sections:
-                    section_gaps.setdefault(sec, []).append(msg)
-                break
-
-    for sec, msgs in section_gaps.items():
-        gap_msg = f"[{sec}] 미반영 커밋: {', '.join(msgs[:3])}"
-        if gap_msg not in gaps:
-            gaps.append(gap_msg)
-
-    # 최근 변경 파일 중 구조 섹션에 없는 것
-    changed = get_recent_changed_files(str(path), n=5)
-    new_files = [f for f in changed if f.endswith((".py", ".ts", ".js", ".go", ".rs"))]
-    if new_files:
-        structure = sections.get("구조", "")
-        unmentioned = [f for f in new_files if Path(f).name not in structure]
-        if unmentioned:
-            gaps.append(f"[구조] 신규 파일 미반영: {', '.join(unmentioned[:5])}")
-
-    return gaps
+    return {
+        "project_doc": project_doc,
+        "diff_mode": diff_info["mode"],
+        "diff": diff_info["diff"],
+        "changed_files": diff_info["changed_files"],
+        "commits": diff_info["commits"],
+        "line_count": diff_info["line_count"],
+    }
 
 
 def update_project_doc(
