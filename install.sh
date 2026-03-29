@@ -513,28 +513,20 @@ def add_command_hook(event, command, timeout, is_async):
 for event, command, timeout, is_async in hook_defs:
     add_command_hook(event, command, timeout, is_async)
 
-# ── Stop hook: command type (auto-commit) ──
+# ── Stop hook 제거 (기존 설치본 정리용) ──
 STOP_HOOK_MARKERS = ['stop.sh', '/finish']
 
-def remove_old_stop_hooks():
-    """기존 Stop hook 제거 (command/prompt 모두)"""
-    stop_hooks = hooks.get('Stop', [])
-    hooks['Stop'] = [
-        g for g in stop_hooks
-        if not any(
-            any(m in h.get('command', '') or m in h.get('prompt', '') for m in STOP_HOOK_MARKERS)
-            for h in g.get('hooks', [])
-        )
-    ]
-    if not hooks['Stop']:
-        hooks.pop('Stop', None)
-
-remove_old_stop_hooks()
-if timing == 'stop':
-    add_command_hook('Stop', f'{target_dir}/hooks/stop.sh', 30, False)
-    print(f'  ✓ Stop hook registered: stop.sh')
-else:
-    print(f'  · WORKLOG_TIMING=manual — Stop hook skipped')
+stop_hooks = hooks.get('Stop', [])
+hooks['Stop'] = [
+    g for g in stop_hooks
+    if not any(
+        any(m in h.get('command', '') or m in h.get('prompt', '') for m in STOP_HOOK_MARKERS)
+        for h in g.get('hooks', [])
+    )
+]
+if not hooks['Stop']:
+    hooks.pop('Stop', None)
+print(f'  ✓ Stop hook removed (worklog uses PostToolUse instead)')
 
 # 저장
 with open(settings_file, 'w', encoding='utf-8') as f:
