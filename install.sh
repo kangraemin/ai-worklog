@@ -233,12 +233,31 @@ print(json.dumps(data))
           err "$(t 'DB 생성 실패' 'DB creation failed') (HTTP $HTTP_CODE)"
           echo "$BODY" | $PYTHON -c "import json,sys; d=json.load(sys.stdin); print(d.get('message',str(d)))" 2>/dev/null || echo "$BODY"
           echo ""
-          printf "$(t '기존 NOTION_DB_ID를 직접 입력하시겠습니까? (빈 값이면 스킵)' 'Enter an existing NOTION_DB_ID manually? (blank to skip)'): "
-          read -r NOTION_DB_ID
-          # DB ID 형식 검증 (32자 hex 또는 하이픈 포함 UUID)
-          if [ -n "$NOTION_DB_ID" ] && [[ ! "$NOTION_DB_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]; then
-            warn "$(t 'DB ID 형식이 올바르지 않을 수 있습니다 (32자 hex 또는 UUID 형식).' \
-                    'DB ID format may be invalid (expected 32-char hex or UUID).')"
+          printf "$(t '기존 NOTION_DB_ID를 입력하세요 (URL 또는 ID, 빈 값이면 스킵)' 'Enter existing NOTION_DB_ID (URL or ID, blank to skip)'): "
+          read -r NOTION_DB_INPUT
+          # URL/문자열에서 ID 자동 추출
+          NOTION_DB_ID=$(echo "$NOTION_DB_INPUT" | $PYTHON -c "
+import sys, re
+raw = sys.stdin.read().strip()
+m = re.search(r'([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', raw, re.IGNORECASE)
+print(m.group(1) if m else raw)
+" 2>/dev/null)
+          # Notion API로 유효성 검증
+          if [ -n "$NOTION_DB_ID" ]; then
+            VERIFY_CODE=$(curl -s --connect-timeout 5 --max-time 10 \
+              -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $NOTION_TOKEN" \
+              -H "Notion-Version: 2022-06-28" \
+              "https://api.notion.com/v1/databases/$NOTION_DB_ID" 2>/dev/null || echo "000")
+            case "$VERIFY_CODE" in
+              200) ok "$(t 'DB 확인 완료' 'DB verified'): $NOTION_DB_ID" ;;
+              403) warn "$(t 'DB에 접근할 수 없습니다. Notion Integration을 DB에 연결했는지 확인하세요.' \
+                          'Cannot access DB. Make sure the Notion Integration is connected.')"
+                   info "$(t 'DB 페이지 → ··· → Connections → Integration 추가' \
+                          'DB page → ··· → Connections → Add integration')" ;;
+              404) warn "$(t 'DB를 찾을 수 없습니다. ID를 다시 확인하세요.' 'DB not found. Check the ID.')" ;;
+              *)   warn "$(t 'DB 검증 실패 (HTTP' 'DB verification failed (HTTP') $VERIFY_CODE)" ;;
+            esac
           fi
         fi
       fi
