@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from worklog_mcp.utils.git import get_recent_commits, get_recent_changed_files, get_diff, get_commits_since_file_update
+from worklog_mcp.utils.git import get_diff, get_commits_since_file_update
 
 SECTIONS = ["이게 뭔가", "왜 만들었나", "구조", "기술 스택", "주요 결정들", "해결한 문제들", "지금 상태"]
 
