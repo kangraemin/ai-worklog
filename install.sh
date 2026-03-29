@@ -404,7 +404,7 @@ copy_file "$PACKAGE_DIR/scripts/worklog-write.sh"           "$TARGET_DIR/scripts
 install_file "$PACKAGE_DIR/hooks/worklog.sh"           "$TARGET_DIR/hooks/worklog.sh"
 install_file "$PACKAGE_DIR/hooks/session-end.sh"       "$TARGET_DIR/hooks/session-end.sh"
 copy_file    "$PACKAGE_DIR/hooks/post-commit.sh"       "$TARGET_DIR/hooks/post-commit.sh"
-copy_file    "$PACKAGE_DIR/.claude/hooks/commit-doc-check.sh" "$TARGET_DIR/hooks/commit-doc-check.sh"
+copy_file    "$PACKAGE_DIR/hooks/commit-doc-check.sh"         "$TARGET_DIR/hooks/commit-doc-check.sh"
 install_file "$PACKAGE_DIR/hooks/stop.sh"              "$TARGET_DIR/hooks/stop.sh"
 install_file "$PACKAGE_DIR/hooks/on-commit.sh"         "$TARGET_DIR/hooks/on-commit.sh"
 
