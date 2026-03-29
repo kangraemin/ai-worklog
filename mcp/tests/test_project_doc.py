@@ -285,3 +285,54 @@ def test_tc_g4_line_count_is_int(tmp_project):
     subprocess.run(["git", "commit", "-m", "docs: 업데이트"], cwd=tmp_project, capture_output=True)
     result = analyze_gaps(str(tmp_project))
     assert isinstance(result["line_count"], int)
+
+
+# ── analyze_gaps 개선 TC ────────────────────────────────────
+
+def test_tc_p1_n_parameter(tmp_project_with_commits):
+    """TC-P1: n 파라미터 동작"""
+    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    result = analyze_gaps(str(tmp_project_with_commits), n=1)
+    assert isinstance(result, dict)
+    assert len(result["commits"]) <= 1
+
+
+def test_tc_p2_sections_key(tmp_project_with_commits):
+    """TC-P2: 반환에 sections 키 존재"""
+    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    result = analyze_gaps(str(tmp_project_with_commits))
+    assert "sections" in result
+    assert isinstance(result["sections"], dict)
+    assert len(result["sections"]) == 7
+
+
+def test_tc_p3_commits_since_doc_update_is_int(tmp_project_with_commits):
+    """TC-P3: commits_since_doc_update가 정수"""
+    (tmp_project_with_commits / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    result = analyze_gaps(str(tmp_project_with_commits))
+    assert isinstance(result["commits_since_doc_update"], int)
+
+
+def test_tc_p4_commits_since_zero_after_update(tmp_project):
+    """TC-P4: PROJECT.md 업데이트 직후 commits_since_doc_update = 0"""
+    import subprocess
+    (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "docs: PROJECT.md 업데이트"], cwd=tmp_project, capture_output=True)
+    result = analyze_gaps(str(tmp_project))
+    assert result["commits_since_doc_update"] == 0
+
+
+def test_tc_p5_noise_excluded(tmp_project):
+    """TC-P5: .worklogs 변경이 diff에서 제외됨"""
+    import subprocess
+    (tmp_project / "PROJECT.md").write_text(SAMPLE_PROJECT_MD)
+    worklogs_dir = tmp_project / ".worklogs"
+    worklogs_dir.mkdir()
+    (worklogs_dir / "2026-03-29.md").write_text("worklog content")
+    subprocess.run(["git", "add", "."], cwd=tmp_project, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "chore: 작업 기록"], cwd=tmp_project, capture_output=True)
+    result = analyze_gaps(str(tmp_project))
+    assert not any(".worklogs" in f for f in result["changed_files"])
+    if result["diff"]:
+        assert ".worklogs" not in result["diff"]

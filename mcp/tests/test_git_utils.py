@@ -70,3 +70,11 @@ def test_tc_d6_get_diff_summary_mode(tmp_project_with_commits):
         # 이 테스트는 실제 git repo에서 큰 diff가 나올 때를 검증하므로 구조만 확인
     result = get_diff(str(tmp_project_with_commits))
     assert result["mode"] in ("full", "summary")
+
+
+def test_tc_p6_get_commits_since_file_update(tmp_project_with_commits):
+    """TC-P6: get_commits_since_file_update 기본 동작"""
+    from worklog_mcp.utils.git import get_commits_since_file_update
+    result = get_commits_since_file_update(str(tmp_project_with_commits))
+    assert isinstance(result, int)
+    assert result >= 0

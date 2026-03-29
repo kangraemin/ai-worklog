@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from worklog_mcp.utils.git import get_recent_commits, get_recent_changed_files, get_diff
+from worklog_mcp.utils.git import get_recent_commits, get_recent_changed_files, get_diff, get_commits_since_file_update
 
 SECTIONS = ["이게 뭔가", "왜 만들었나", "구조", "기술 스택", "주요 결정들", "해결한 문제들", "지금 상태"]
 
@@ -77,37 +77,48 @@ def create_project_doc(project_path: str, sections: dict[str, str]) -> str:
     return f"Created {doc_path}"
 
 
-def analyze_gaps(project_path: str) -> dict:
+def analyze_gaps(project_path: str, n: int = 10) -> dict:
     """PROJECT.md와 최근 변경사항을 반환한다. Claude가 gap을 판단한다.
 
     Args:
         project_path: 프로젝트 루트 디렉토리 경로
+        n: 분석할 최근 커밋 수 (기본 10)
 
     Returns:
         {
-            "project_doc": str | None,  # 현재 PROJECT.md 내용 (없으면 None)
+            "project_doc": str | None,       # 현재 PROJECT.md 내용 (없으면 None)
+            "sections": dict[str, str],      # 섹션별 파싱 결과 (없으면 {})
             "diff_mode": "full" | "summary",
-            "diff": str,                # full 모드일 때 실제 diff
+            "diff": str,
             "changed_files": list[str],
             "commits": list[str],
             "line_count": int,
+            "commits_since_doc_update": int, # PROJECT.md 마지막 수정 이후 커밋 수
         }
     """
     path = Path(project_path).resolve()
 
-    # git repo 확인 + diff 가져오기 (에러 전파)
-    diff_info = get_diff(str(path), n=10)
+    diff_info = get_diff(str(path), n=n)
 
     doc_path = path / "PROJECT.md"
-    project_doc = doc_path.read_text(encoding="utf-8") if doc_path.exists() else None
+    if doc_path.exists():
+        project_doc = doc_path.read_text(encoding="utf-8")
+        sections = _parse_sections(project_doc)
+    else:
+        project_doc = None
+        sections = {}
+
+    commits_since = get_commits_since_file_update(str(path), "PROJECT.md")
 
     return {
         "project_doc": project_doc,
+        "sections": sections,
         "diff_mode": diff_info["mode"],
         "diff": diff_info["diff"],
         "changed_files": diff_info["changed_files"],
         "commits": diff_info["commits"],
         "line_count": diff_info["line_count"],
+        "commits_since_doc_update": commits_since,
     }
 
 
