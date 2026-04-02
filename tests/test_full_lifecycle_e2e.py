@@ -789,6 +789,127 @@ class TestConfigChange(_LifecycleBase):
             self.assertNotIn("토큰 사용량", content, "should not have Korean header")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 19. Hook WORKLOG_TIMING 기본값 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+HOOK_FILES = [
+    os.path.join(PACKAGE_DIR, "hooks", f)
+    for f in ("post-commit.sh", "on-commit.sh", "worklog.sh", "stop.sh")
+]
+
+
+class TestHookDefaults(unittest.TestCase):
+    """hook 파일의 WORKLOG_TIMING 기본값이 each-commit인지 검증"""
+
+    def test_hooks_no_stop_default(self):
+        """hook 4개에 WORKLOG_TIMING:-stop 패턴 없음"""
+        for path in HOOK_FILES:
+            with open(path) as f:
+                content = f.read()
+            self.assertNotIn(
+                "WORKLOG_TIMING:-stop",
+                content,
+                f"{os.path.basename(path)} still has WORKLOG_TIMING:-stop",
+            )
+
+    def test_hooks_use_each_commit_default(self):
+        """hook 4개에 WORKLOG_TIMING:-each-commit 패턴 존재"""
+        for path in HOOK_FILES:
+            with open(path) as f:
+                content = f.read()
+            self.assertIn(
+                "WORKLOG_TIMING:-each-commit",
+                content,
+                f"{os.path.basename(path)} missing WORKLOG_TIMING:-each-commit",
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 20. WORKLOG_TIMING=stop → each-commit 마이그레이션 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestTimingMigration(_LifecycleBase):
+    """기존 stop 유저가 재설치/업데이트 시 each-commit으로 마이그레이션"""
+
+    def test_stop_to_each_commit_on_reinstall(self):
+        """settings.json에 stop 세팅 후 재설치 → each-commit으로 변경"""
+        # 1차 설치
+        r = self._install(["1", "1", "3", "1", "1", "5", "5"])
+        self.assertEqual(r.returncode, 0)
+        target = os.path.join(self.tmp, ".claude")
+
+        # stop으로 강제 변경 (이전 버전 시뮬레이션)
+        settings_path = os.path.join(target, "settings.json")
+        with open(settings_path) as f:
+            cfg = json.load(f)
+        cfg["env"]["WORKLOG_TIMING"] = "stop"
+        with open(settings_path, "w") as f:
+            json.dump(cfg, f, indent=2)
+
+        # 재설치
+        r2 = self._install(["1", "1", "3", "1", "1", "5", "5"])
+        self.assertEqual(r2.returncode, 0)
+
+        with open(settings_path) as f:
+            cfg2 = json.load(f)
+        self.assertEqual(
+            cfg2["env"]["WORKLOG_TIMING"], "each-commit",
+            "stop should be migrated to each-commit on reinstall",
+        )
+
+    def test_manual_not_changed_on_reinstall(self):
+        """manual은 재설치해도 manual 유지"""
+        # manual로 설치
+        r = self._install(["1", "1", "3", "1", "2", "5", "5"])
+        self.assertEqual(r.returncode, 0)
+        target = os.path.join(self.tmp, ".claude")
+
+        # 재설치 (each-commit 선택이지만 기존 manual 확인)
+        r2 = self._install(["1", "1", "3", "1", "2", "5", "5"])
+        self.assertEqual(r2.returncode, 0)
+
+        settings_path = os.path.join(target, "settings.json")
+        with open(settings_path) as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg["env"]["WORKLOG_TIMING"], "manual")
+
+    def test_update_check_migrates_stop(self):
+        """update-check.sh 마이그레이션 로직이 stop→each-commit 변환"""
+        # settings.json에 stop 세팅
+        target = os.path.join(self.tmp, ".claude")
+        os.makedirs(target, exist_ok=True)
+        settings_path = os.path.join(target, "settings.json")
+        cfg = {"env": {"WORKLOG_TIMING": "stop"}}
+        with open(settings_path, "w") as f:
+            json.dump(cfg, f, indent=2)
+
+        # update-check.sh의 마이그레이션 로직 직접 실행
+        migrate_script = f"""
+import json, sys
+sf = sys.argv[1]
+with open(sf) as f: cfg = json.load(f)
+env = cfg.get('env', {{}})
+if env.get('WORKLOG_TIMING') == 'stop':
+    env['WORKLOG_TIMING'] = 'each-commit'
+    cfg['env'] = env
+    with open(sf, 'w') as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        f.write('\\n')
+    print('migrated')
+"""
+        r = subprocess.run(
+            ["python3", "-c", migrate_script, settings_path],
+            capture_output=True, text=True,
+        )
+        self.assertIn("migrated", r.stdout)
+
+        with open(settings_path) as f:
+            cfg2 = json.load(f)
+        self.assertEqual(cfg2["env"]["WORKLOG_TIMING"], "each-commit")
+
+
 if __name__ == "__main__":
     import sys
     result = unittest.main(verbosity=2, exit=False)

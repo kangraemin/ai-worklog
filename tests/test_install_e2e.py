@@ -1281,6 +1281,74 @@ class TestSummaryOutput(_Base):
         self.assertNotIn("uvx worklog-for-claude (interval", summary_section)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 27. worklog-config 커맨드 설치 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestWorklogConfigCommand(_Base):
+    """worklog-config.md 설치·동기화 검증"""
+
+    _INPUTS = ["1", "1", "3", "1", "1", "5", "5"]
+
+    def test_worklog_config_installed_with_frontmatter(self):
+        """설치 후 worklog-config.md에 description frontmatter 존재"""
+        self._run(self._INPUTS)
+        path = os.path.join(self.tmp, ".claude", "commands", "worklog-config.md")
+        self.assertTrue(os.path.exists(path), "worklog-config.md not installed")
+        with open(path) as f:
+            content = f.read()
+        self.assertIn("---", content)
+        self.assertIn("description:", content)
+
+    def test_worklog_config_content_matches_source(self):
+        """설치된 파일 내용이 소스와 일치"""
+        self._run(self._INPUTS)
+        installed = os.path.join(self.tmp, ".claude", "commands", "worklog-config.md")
+        source = os.path.join(PACKAGE_DIR, "commands", "worklog-config.md")
+        with open(installed) as f:
+            installed_content = f.read()
+        with open(source) as f:
+            source_content = f.read()
+        self.assertEqual(installed_content, source_content)
+
+    def test_update_check_includes_worklog_config(self):
+        """update-check.sh FILES 배열에 worklog-config.md 포함"""
+        update_check = os.path.join(PACKAGE_DIR, "scripts", "update-check.sh")
+        with open(update_check) as f:
+            content = f.read()
+        self.assertIn('"commands/worklog-config.md"', content)
+
+    def test_reinstall_preserves_worklog_config(self):
+        """재설치 시 worklog-config.md 여전히 존재"""
+        self._run(self._INPUTS)
+        self._run(self._INPUTS)  # 재설치
+        path = os.path.join(self.tmp, ".claude", "commands", "worklog-config.md")
+        self.assertTrue(os.path.exists(path), "worklog-config.md lost after reinstall")
+
+    def test_install_and_update_check_commands_in_sync(self):
+        """install.sh와 update-check.sh의 commands/ 목록 일치"""
+        import re
+
+        install_sh = os.path.join(PACKAGE_DIR, "install.sh")
+        update_sh = os.path.join(PACKAGE_DIR, "scripts", "update-check.sh")
+
+        with open(install_sh) as f:
+            install_content = f.read()
+        # install.sh: $TARGET_DIR/commands/xxx.md 또는 $PACKAGE_DIR/commands/xxx.md
+        install_cmds = set(re.findall(r'(?:commands/[\w-]+\.md)', install_content))
+
+        with open(update_sh) as f:
+            update_content = f.read()
+        update_cmds = set(re.findall(r'"(commands/[^"]+)"', update_content))
+
+        self.assertEqual(
+            install_cmds, update_cmds,
+            f"install.sh has {install_cmds - update_cmds} extra, "
+            f"update-check.sh has {update_cmds - install_cmds} extra",
+        )
+
+
 if __name__ == "__main__":
     result = unittest.main(verbosity=2, exit=False)
     sys.exit(0 if result.result.wasSuccessful() else 1)

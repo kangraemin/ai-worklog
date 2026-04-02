@@ -117,6 +117,7 @@ FILES=(
   "commands/finish.md"
   "commands/update-worklog.md"
   "commands/migrate-worklogs.md"
+  "commands/worklog-config.md"
   # rules
   "rules/worklog-rules.md"
   "rules/auto-commit-rules.md"
@@ -163,6 +164,31 @@ if [ "$FAILED" -gt 0 ]; then
   echo "worklog-for-claude: 업데이트 일부 실패 ($FAILED개). 다음 실행 시 재시도합니다." >&2
   exit 0
 fi
+
+# ── post-update: WORKLOG_TIMING=stop → each-commit 마이그레이션 ──────────────
+_migrate_timing() {
+  local sf="$1"
+  [ -f "$sf" ] || return 0
+  $PYTHON -c "
+import json, sys
+sf = sys.argv[1]
+with open(sf) as f: cfg = json.load(f)
+env = cfg.get('env', {})
+if env.get('WORKLOG_TIMING') == 'stop':
+    env['WORKLOG_TIMING'] = 'each-commit'
+    cfg['env'] = env
+    with open(sf, 'w') as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        f.write('\n')
+    print('migrated')
+" "$sf" 2>/dev/null
+}
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+for _sf in "$HOME/.claude/settings.json" ${REPO_ROOT:+"$REPO_ROOT/.claude/settings.json"}; do
+  result=$(_migrate_timing "$_sf")
+  [ "$result" = "migrated" ] && echo -e "${_G}✓${_N}  WORKLOG_TIMING: stop → each-commit ($_sf)" >&2
+done
 
 # ── post-update: SessionStart hook 등록 ──────────────────────────────────────
 _register_session_start() {
