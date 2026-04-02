@@ -562,7 +562,7 @@ class TestHookChaining(_LifecycleBase):
 
 EXPECTED_HOOKS = {
     "post-commit.sh", "worklog.sh", "on-commit.sh",
-    "commit-doc-check.sh", "session-end.sh", "stop.sh",
+    "commit-doc-check.sh", "session-end.sh",
 }
 EXPECTED_SCRIPTS = {
     "worklog-write.sh", "notion-worklog.sh", "notion-migrate-worklogs.sh",
@@ -677,7 +677,7 @@ class TestUninstallFull(_LifecycleBase):
     def test_settings_hooks_clean(self):
         cfg = self._settings(self.target)
         WORKLOG_MARKERS = ["worklog.sh", "on-commit.sh", "commit-doc-check.sh",
-                           "session-end.sh", "stop.sh", "update-check.sh"]
+                           "session-end.sh", "update-check.sh"]
         for event, groups in cfg.get("hooks", {}).items():
             for g in groups:
                 for h in g.get("hooks", []):

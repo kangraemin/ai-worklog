@@ -35,7 +35,6 @@ EXPECTED_FILES = [
     "hooks/worklog.sh",
     "hooks/session-end.sh",
     "hooks/post-commit.sh",
-    "hooks/stop.sh",
     "hooks/on-commit.sh",
     "hooks/commit-doc-check.sh",
     "commands/worklog.md",
@@ -53,7 +52,6 @@ EXPECTED_EXEC = [
     "hooks/worklog.sh",
     "hooks/session-end.sh",
     "hooks/post-commit.sh",
-    "hooks/stop.sh",
     "hooks/on-commit.sh",
     "hooks/commit-doc-check.sh",
 ]
@@ -165,7 +163,7 @@ class TestFreshGitInstall(_Base):
         env = self._settings()["env"]
         self.assertEqual(env["WORKLOG_DEST"], "git")
         self.assertEqual(env["WORKLOG_GIT_TRACK"], "true")
-        self.assertEqual(env["WORKLOG_TIMING"], "stop")
+        self.assertEqual(env["WORKLOG_TIMING"], "each-commit")
         self.assertEqual(env["WORKLOG_LANG"], "ko")
 
     def test_settings_env_english_lang(self):
@@ -334,7 +332,7 @@ class TestReinstall(_Base):
         env = {
             "WORKLOG_DEST": "git",
             "WORKLOG_GIT_TRACK": "true",
-            "WORKLOG_TIMING": "stop",
+            "WORKLOG_TIMING": "each-commit",
             "AI_WORKLOG_DIR": d,
         }
         if extra_env:
@@ -878,7 +876,7 @@ class TestBackwardCompatMarkers(_Base):
             "# --- ai-worklog end ---\n"
             "echo after\n"
         )
-        hook_path = os.path.join(d, "stop.sh")
+        hook_path = os.path.join(d, "on-commit.sh")
         with open(hook_path, "w") as f:
             f.write(old_hook)
 
@@ -902,7 +900,7 @@ class TestBackwardCompatMarkers(_Base):
             "echo existing_managed\n"
             "# --- worklog-for-claude end ---\n"
         )
-        hook_path = os.path.join(d, "stop.sh")
+        hook_path = os.path.join(d, "on-commit.sh")
         with open(hook_path, "w") as f:
             f.write(new_hook)
 
@@ -1159,6 +1157,127 @@ class TestInstallUninstallCycle(_Base):
         )
         self.assertEqual(r2.returncode, 0, f"uninstall failed: {r2.stderr}")
         self.assertFalse(os.path.exists(os.path.join(target, "hooks", "post-commit.sh")))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 22. non-git + local + gitignore 크래시 수정 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestNonGitLocalGitIgnore(_Base):
+    """git repo 아닌 곳에서 로컬 + git-ignore 선택 시 크래시 안 남"""
+
+    def test_exit_zero(self):
+        """설치 완료 (exit 0)"""
+        # git repo 아닌 빈 디렉토리
+        project = os.path.join(self.tmp, "nongit")
+        os.makedirs(project)
+        # local(2), git(3), git-ignore(2), stop(1), mcp skip
+        r = self._run(["1", "2", "3", "2", "1", "5", "5"], cwd=project)
+        self.assertEqual(r.returncode, 0, f"should not crash: {r.stderr}")
+
+    def test_files_installed(self):
+        """파일 설치 정상"""
+        project = os.path.join(self.tmp, "nongit2")
+        os.makedirs(project)
+        self._run(["1", "2", "3", "2", "1", "5", "5"], cwd=project)
+        target = os.path.join(project, ".claude")
+        self._assert_files(target)
+
+    def test_no_gitignore_created(self):
+        """.gitignore 생성 안 됨 (git repo 아니니까)"""
+        project = os.path.join(self.tmp, "nongit3")
+        os.makedirs(project)
+        self._run(["1", "2", "3", "2", "1", "5", "5"], cwd=project)
+        self.assertFalse(os.path.exists(os.path.join(project, ".gitignore")))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 23. argv 인덱싱 수정 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestArgvIndexing(_Base):
+    """PROJECT_DOC_CHECK_INTERVAL이 숫자로 설정되는지"""
+
+    def test_doc_check_interval_is_number(self):
+        """PROJECT_DOC_CHECK_INTERVAL이 'false'가 아닌 숫자"""
+        # MCP interval 입력 = "5", MCP client = skip
+        self._run(["1", "1", "3", "1", "1", "5", "5"])
+        cfg = self._settings()
+        val = cfg.get("env", {}).get("PROJECT_DOC_CHECK_INTERVAL", "")
+        self.assertNotEqual(val, "false", "should not be 'false' (argv bug)")
+        self.assertTrue(val.isdigit(), f"should be a number, got: {val}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 24. timing 값 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestTimingValue(_Base):
+    """timing 값이 each-commit으로 설정"""
+
+    def test_each_commit_timing(self):
+        """stop(1) 선택 시 WORKLOG_TIMING=each-commit"""
+        self._run(["1", "1", "3", "1", "1", "5", "5"])
+        cfg = self._settings()
+        self.assertEqual(cfg["env"]["WORKLOG_TIMING"], "each-commit")
+
+    def test_manual_timing(self):
+        """manual(2) 선택 시 WORKLOG_TIMING=manual"""
+        self._run(["1", "1", "3", "1", "2", "5", "5"])
+        cfg = self._settings()
+        self.assertEqual(cfg["env"]["WORKLOG_TIMING"], "manual")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 25. stop.sh 미설치 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestStopShNotInstalled(_Base):
+    """신규 설치 시 hooks/stop.sh 없음"""
+
+    def test_no_stop_sh(self):
+        self._run(["1", "1", "3", "1", "1", "5", "5"])
+        target = os.path.join(self.tmp, ".claude")
+        self.assertFalse(
+            os.path.exists(os.path.join(target, "hooks", "stop.sh")),
+            "stop.sh should not be installed",
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 26. 요약 출력 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSummaryOutput(_Base):
+    """설치 완료 요약 출력 정확성"""
+
+    def test_hooks_summary_correct(self):
+        """Hooks 요약에 PostToolUse (3), SessionStart, SessionEnd"""
+        r = self._run(["1", "1", "3", "1", "1", "5", "5"])
+        out = r.stdout
+        self.assertIn("PostToolUse (3)", out)
+        self.assertIn("SessionStart", out)
+        self.assertIn("SessionEnd", out)
+
+    def test_no_auto_commit_line(self):
+        """AUTO_COMMIT 요약 줄 없음"""
+        r = self._run(["1", "1", "3", "1", "1", "5", "5"])
+        out = r.stdout
+        self.assertNotIn("Auto-Commit", out)
+        self.assertNotIn("자동 커밋", out)
+
+    def test_no_mcp_line_when_skip(self):
+        """MCP skip 시 MCP 줄 없음"""
+        r = self._run(["1", "1", "3", "1", "1", "5", "5"])
+        out = r.stdout
+        # MCP 줄이 요약 부분에 없어야 함 (설치 완료 이후)
+        summary_section = out.split("설치 완료")[-1] if "설치 완료" in out else out
+        self.assertNotIn("uvx worklog-for-claude (interval", summary_section)
 
 
 if __name__ == "__main__":

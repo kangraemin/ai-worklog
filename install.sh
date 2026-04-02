@@ -305,8 +305,8 @@ fi
 # ── 작성 시점 ────────────────────────────────────────────────────────────────
 header "$(t '워크로그 작성 시점' 'When to Write Worklogs')"
 
-echo "  1) stop   — $(t '대화 종료 시 자동 (추천)' 'automatically on session end (recommended)')"
-echo "  2) manual — $(t '/worklog 실행할 때만' 'only when running /worklog')"
+echo "  1) each-commit — $(t '커밋할 때마다 자동 (추천)' 'automatically on every commit (recommended)')"
+echo "  2) manual      — $(t '/worklog 실행할 때만' 'only when running /worklog')"
 echo ""
 printf "$(t '선택' 'Select') [1]: "
 read -r TIMING_CHOICE
@@ -314,7 +314,7 @@ TIMING_CHOICE="${TIMING_CHOICE:-1}"
 
 case "$TIMING_CHOICE" in
   2) WORKLOG_TIMING="manual" ;;
-  *) WORKLOG_TIMING="stop" ;;
+  *) WORKLOG_TIMING="each-commit" ;;
 esac
 
 # ── 자동 커밋 (deprecated) ────────────────────────────────────────────────────
@@ -418,7 +418,6 @@ install_file "$PACKAGE_DIR/hooks/worklog.sh"           "$TARGET_DIR/hooks/worklo
 install_file "$PACKAGE_DIR/hooks/session-end.sh"       "$TARGET_DIR/hooks/session-end.sh"
 copy_file    "$PACKAGE_DIR/hooks/post-commit.sh"       "$TARGET_DIR/hooks/post-commit.sh"
 copy_file    "$PACKAGE_DIR/hooks/commit-doc-check.sh"         "$TARGET_DIR/hooks/commit-doc-check.sh"
-install_file "$PACKAGE_DIR/hooks/stop.sh"              "$TARGET_DIR/hooks/stop.sh"
 install_file "$PACKAGE_DIR/hooks/on-commit.sh"         "$TARGET_DIR/hooks/on-commit.sh"
 
 # commands (항상 덮어쓰기)
@@ -440,7 +439,6 @@ chmod +x "$TARGET_DIR/hooks/worklog.sh"
 chmod +x "$TARGET_DIR/hooks/session-end.sh"
 chmod +x "$TARGET_DIR/hooks/post-commit.sh"
 chmod +x "$TARGET_DIR/hooks/commit-doc-check.sh"
-chmod +x "$TARGET_DIR/hooks/stop.sh"
 chmod +x "$TARGET_DIR/hooks/on-commit.sh"
 
 # ── 버전 SHA 저장 ─────────────────────────────────────────────────────────────
@@ -481,8 +479,8 @@ dest               = sys.argv[4]
 git_track          = sys.argv[5]
 notion_db_id       = sys.argv[6]
 worklog_lang       = sys.argv[7]
-doc_check_interval = sys.argv[8] if len(sys.argv) > 8 else '5'
-auto_commit   = sys.argv[8]
+auto_commit        = sys.argv[8] if len(sys.argv) > 8 else 'false'
+doc_check_interval = sys.argv[9] if len(sys.argv) > 9 else '5'
 
 # 기존 설정 읽기
 cfg = {}
@@ -560,10 +558,15 @@ ok "$(t 'settings.json 업데이트 완료' 'settings.json updated')"
 # ── .gitignore에 .worklogs/ 추가 (git 미추적 모드) ──────────────────────────
 if [ "$WORKLOG_GIT_TRACK" = "false" ]; then
   if [ "$SCOPE" = "local" ]; then
-    GITIGNORE="$(git rev-parse --show-toplevel 2>/dev/null)/.gitignore"
-    if [ -n "$GITIGNORE" ] && ! grep -q "^\.worklogs/" "$GITIGNORE" 2>/dev/null; then
-      echo ".worklogs/" >> "$GITIGNORE"
-      ok "$(t '.gitignore에 .worklogs/ 추가' 'Added .worklogs/ to .gitignore')"
+    _REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$_REPO_ROOT" ]; then
+      GITIGNORE="$_REPO_ROOT/.gitignore"
+      if ! grep -q "^\.worklogs/" "$GITIGNORE" 2>/dev/null; then
+        echo ".worklogs/" >> "$GITIGNORE"
+        ok "$(t '.gitignore에 .worklogs/ 추가' 'Added .worklogs/ to .gitignore')"
+      fi
+    else
+      info "$(t 'git 레포가 아닙니다. .gitignore 설정을 건너뜁니다.' 'Not a git repo. Skipping .gitignore setup.')"
     fi
   else
     # 전역: global gitignore에 추가
@@ -634,6 +637,7 @@ fi
 header "$(t 'MCP 서버 설정' 'MCP Server Setup')"
 
 DOC_CHECK_INTERVAL="5"
+_MCP_INSTALLED="false"
 
 if ! command -v uv &>/dev/null; then
   warn "$(t 'uv가 없습니다. MCP 설정을 건너뜁니다.' 'uv not found. Skipping MCP setup.')"
@@ -695,6 +699,8 @@ PYEOF
   if [ "$MCP_CHOICE" = "5" ]; then
     info "$(t 'MCP 설정 건너뜀. 나중에 수동으로 추가하세요.' 'MCP setup skipped. Add manually later.')"
     info "  uvx worklog-for-claude"
+  else
+    _MCP_INSTALLED="true"
   fi
 fi
 
@@ -712,10 +718,11 @@ echo "  ├─ $(t '언어' 'Language'):  $WORKLOG_LANG"
 if [ -n "$NOTION_DB_ID" ]; then
 echo "  ├─ Notion DB: $NOTION_DB_ID"
 fi
-echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse, SessionEnd"
+echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse (3), SessionStart, SessionEnd"
+if [ "${_MCP_INSTALLED:-}" = "true" ]; then
 echo "  ├─ MCP:        uvx worklog-for-claude (interval: ${DOC_CHECK_INTERVAL:-5})"
-echo "  ├─ $(t 'Git Hook' 'Git Hook'):  post-commit ($(t '터미널 커밋 시 워크로그' 'worklog on terminal commits'))"
-echo "  └─ $(t '자동 커밋' 'Auto-Commit'): $([ "$AUTO_COMMIT" = "true" ] && t '사용 (/finish)' 'Enabled (/finish)' || t '사용 안 함' 'Disabled')"
+fi
+echo "  └─ $(t 'Git Hook' 'Git Hook'):  post-commit ($(t '터미널 커밋 시 워크로그' 'worklog on terminal commits'))"
 
 echo ""
 echo -e "  ${BOLD}$(t '사용법' 'Usage')${NC}"
