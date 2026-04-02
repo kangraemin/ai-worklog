@@ -425,6 +425,7 @@ copy_file "$PACKAGE_DIR/commands/worklog.md"          "$TARGET_DIR/commands/work
 copy_file "$PACKAGE_DIR/commands/migrate-worklogs.md" "$TARGET_DIR/commands/migrate-worklogs.md"
 copy_file "$PACKAGE_DIR/commands/update-worklog.md"   "$TARGET_DIR/commands/update-worklog.md"
 copy_file "$PACKAGE_DIR/commands/finish.md"           "$TARGET_DIR/commands/finish.md"
+copy_file "$PACKAGE_DIR/commands/worklog-config.md"  "$TARGET_DIR/commands/worklog-config.md"
 
 # rules (항상 덮어쓰기)
 copy_file "$PACKAGE_DIR/rules/worklog-rules.md"    "$TARGET_DIR/rules/worklog-rules.md"
