@@ -70,11 +70,21 @@ with open(file, 'w') as f:
 
 5. 변경 결과 확인: 조회 플로우 실행하여 최종 상태 출력
 
+## 건강 진단 (인자 없이 실행 시)
+
+설정 조회 출력 후 이어서 건강 진단을 실행한다:
+
+```bash
+bash "${AI_WORKLOG_DIR:-$HOME/.claude}/scripts/healthcheck.sh"
+```
+
+문제 발견 시 `/update-worklog` 또는 `install.sh` 재설치를 제안한다.
+
 ## 사용 예시
 
 ```
-/worklog-config                    → 현재 설정 조회
-/worklog-config timing manual      → 수동 모드로 변경
+/worklog-config                    → 현재 설정 조회 + 건강 진단
+/worklog-config timing manual      → 수동 모드로 변경 (건강 진단 미실행)
 /worklog-config dest git           → 로컬 파일만 저장
 /worklog-config lang en            → 영어로 변경
 /worklog-config git-track false    → .worklogs/ git 미추적
