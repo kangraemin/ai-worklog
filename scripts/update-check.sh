@@ -229,4 +229,4 @@ fi
 echo "$LATEST_SHA" > "$VERSION_FILE"
 
 echo -e "\n${_G}✓${_N}  ${_B}worklog-for-claude${_N} $INSTALLED_SHA → $LATEST_SHA — ${_G}${UPDATED}개 업데이트${_N}, ${_D}${UNCHANGED}개 변경 없음${_N}" >&2
-echo "worklog-for-claude $INSTALLED_SHA → $LATEST_SHA 업데이트 완료 ($UPDATED개 파일)"
+echo "worklog-for-claude $INSTALLED_SHA → $LATEST_SHA 업데이트 완료 (${UPDATED}개 파일)"
