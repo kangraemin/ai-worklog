@@ -107,6 +107,7 @@ FILES=(
   "scripts/update-check.sh"
   # hooks
   "hooks/post-commit.sh"
+  "hooks/on-commit.sh"
   "hooks/worklog.sh"
   "hooks/session-end.sh"
   "hooks/stop.sh"
