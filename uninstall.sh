@@ -62,6 +62,7 @@ WORKLOG_FILES=(
   "hooks/on-commit.sh"
   "hooks/commit-doc-check.sh"
   "hooks/session-end.sh"
+  "hooks/stop.sh"
   # commands
   "commands/worklog.md"
   "commands/finish.md"

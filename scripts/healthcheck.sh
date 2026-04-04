@@ -91,6 +91,7 @@ EXPECTED_FILES=(
   "hooks/session-end.sh"
   "hooks/post-commit.sh"
   "hooks/commit-doc-check.sh"
+  "hooks/stop.sh"
   "git-hooks/post-commit"
   "commands/worklog.md"
   "commands/worklog-config.md"
@@ -126,6 +127,7 @@ HOOK_CHECKS=(
   "commit-doc-check.sh:PostToolUse:"
   "update-check.sh:SessionStart:"
   "session-end.sh:SessionEnd:"
+  "stop.sh:Stop:"
 )
 
 HOOKS_TOTAL=${#HOOK_CHECKS[@]}

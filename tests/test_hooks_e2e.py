@@ -168,6 +168,70 @@ class TestStopUncommittedChanges(_HookBase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 2-b. stop.sh 엣지 케이스
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestStopManualTimingSkip(_HookBase):
+    """WORKLOG_TIMING=manual이면 stop.sh가 exit 0"""
+
+    def test_manual_skips(self):
+        stdin = {"cwd": self.repo, "stop_hook_active": False}
+        r = self._run_stop_hook(stdin, WORKLOG_TIMING="manual")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.strip(), "")
+
+
+class TestStopReentryGuard(_HookBase):
+    """stop_hook_active=true이면 exit 0 (재진입 방지)"""
+
+    def test_reentry_skips(self):
+        stdin = {"cwd": self.repo, "stop_hook_active": True}
+        r = self._run_stop_hook(stdin)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.strip(), "")
+
+
+class TestStopNonGitRepo(_HookBase):
+    """git repo가 아닌 디렉토리에서 exit 0"""
+
+    def test_non_git_skips(self):
+        non_git = os.path.join(self.tmp, "not-a-repo")
+        os.makedirs(non_git, exist_ok=True)
+        stdin = {"cwd": non_git, "stop_hook_active": False}
+        r = self._run_stop_hook(stdin)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.strip(), "")
+
+
+class TestStopPendingDifferentProject(_HookBase):
+    """다른 프로젝트의 pending 마커는 무시"""
+
+    def setUp(self):
+        super().setUp()
+        self.repo_abs = os.path.realpath(self.repo)
+
+        # 다른 프로젝트 경로로 pending 마커 생성
+        pending_dir = os.path.join(self.tmp, ".claude", "worklogs", ".pending")
+        os.makedirs(pending_dir, exist_ok=True)
+        pending_file = os.path.join(pending_dir, "99999.json")
+        with open(pending_file, "w") as f:
+            json.dump({
+                "commit_msg": "feat: other project",
+                "changed_files": "other.py",
+                "project_cwd": "/some/other/project",
+            }, f)
+
+        self.stdin = {"cwd": self.repo_abs, "stop_hook_active": False}
+
+    def test_different_project_ignored(self):
+        """다른 프로젝트 pending이면 block 안 함"""
+        r = self._run_stop_hook(self.stdin)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.strip(), "")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 3. session-end.sh: collecting 파일 정리
 # ══════════════════════════════════════════════════════════════════════════════
 

@@ -499,10 +499,12 @@ class TestHookStructure(_Base):
         self.assertIsNotNone(found, "on-commit.sh should be registered in PostToolUse with Bash matcher")
         self.assertFalse(found.get("async", False), "on-commit.sh must NOT be async (needs to block)")
 
-    def test_stop_hook_not_registered(self):
-        """Stop hook이 settings.json에 등록되지 않음 (worklog는 PostToolUse 기반)"""
+    def test_stop_hook_registered(self):
+        """Stop hook에 stop.sh 등록 확인"""
         hooks = self._cfg.get("hooks", {})
-        self.assertNotIn("Stop", hooks)
+        self.assertIn("Stop", hooks)
+        found = self._find_hook(self._cfg, "Stop", "stop.sh")
+        self.assertIsNotNone(found, "stop.sh not found in Stop hooks")
 
     def test_session_end_registered(self):
         hooks = self._cfg.get("hooks", {})
@@ -841,10 +843,12 @@ class TestOnCommitHookInstall(_Base):
         found = self._find_hook(cfg, "PostToolUse", "commit-doc-check.sh")
         self.assertIsNotNone(found, "commit-doc-check.sh not found in PostToolUse")
 
-    def test_no_stop_hook_registered(self):
-        """Stop hook은 등록되지 않음"""
+    def test_stop_hook_registered(self):
+        """Stop hook에 stop.sh 등록 확인"""
         cfg = self._installed_cfg(["1", "1", "3", "1", "1", "", "5"])
-        self.assertNotIn("Stop", cfg.get("hooks", {}))
+        self.assertIn("Stop", cfg.get("hooks", {}))
+        found = self._find_hook(cfg, "Stop", "stop.sh")
+        self.assertIsNotNone(found, "stop.sh not found in Stop hooks")
 
     def test_manual_timing_no_on_commit(self):
         """WORKLOG_TIMING=manual이면 on-commit도 등록되지만 동작 안 함 (hook 내부에서 스킵)"""
@@ -1233,19 +1237,19 @@ class TestTimingValue(_Base):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 25. stop.sh 미설치 검증
+# 25. stop.sh 설치 검증
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-class TestStopShNotInstalled(_Base):
-    """신규 설치 시 hooks/stop.sh 없음"""
+class TestStopShInstalled(_Base):
+    """신규 설치 시 hooks/stop.sh 설치됨"""
 
-    def test_no_stop_sh(self):
+    def test_stop_sh_exists(self):
         self._run(["1", "1", "3", "1", "1", "5", "5"])
         target = os.path.join(self.tmp, ".claude")
-        self.assertFalse(
+        self.assertTrue(
             os.path.exists(os.path.join(target, "hooks", "stop.sh")),
-            "stop.sh should not be installed",
+            "stop.sh should be installed",
         )
 
 

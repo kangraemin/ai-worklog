@@ -32,6 +32,7 @@ EXPECTED_FILES = [
     "hooks/session-end.sh",
     "hooks/post-commit.sh",
     "hooks/commit-doc-check.sh",
+    "hooks/stop.sh",
     "git-hooks/post-commit",
     "commands/worklog.md",
     "commands/worklog-config.md",
@@ -41,7 +42,7 @@ EXPECTED_FILES = [
 ]
 
 # 5개 hook 확인 대상
-HOOK_FILES = ["worklog.sh", "on-commit.sh", "commit-doc-check.sh", "update-check.sh", "session-end.sh"]
+HOOK_FILES = ["worklog.sh", "on-commit.sh", "commit-doc-check.sh", "update-check.sh", "session-end.sh", "stop.sh"]
 
 
 def _write_stub(path: str, content: str = "#!/bin/bash\necho stub\n") -> None:
@@ -74,6 +75,9 @@ def _default_hooks(target_dir: str) -> dict:
         ],
         "SessionEnd": [
             {"hooks": [{"type": "command", "command": f"{target_dir}/hooks/session-end.sh", "timeout": 15}]},
+        ],
+        "Stop": [
+            {"hooks": [{"type": "command", "command": f"{target_dir}/hooks/stop.sh", "timeout": 15}]},
         ],
     }
 
@@ -238,8 +242,8 @@ class TestHealthyNotionOnly(_Base):
         self._setup_full("notion-only")
         r = self._run_healthcheck()
         self.assertEqual(r["status"], "pass")
-        self.assertEqual(r["files_found"], 16)
-        self.assertEqual(r["hooks_found"], 5)
+        self.assertEqual(r["files_found"], 17)
+        self.assertEqual(r["hooks_found"], 6)
         self.assertEqual(r["git_hook"], "ok")
         self.assertEqual(r["mcp"], "ok")
         self.assertEqual(r["env"], "ok")
@@ -277,7 +281,7 @@ class TestMissingSingleScript(_Base):
         self._setup_full()
         os.remove(os.path.join(self.target, "scripts/duration.py"))
         r = self._run_healthcheck()
-        self.assertEqual(r["files_found"], 15)
+        self.assertEqual(r["files_found"], 16)
         self.assertIn("scripts/duration.py", r["files_missing"])
 
 
@@ -288,7 +292,7 @@ class TestMissingSingleHook(_Base):
         self._setup_full()
         os.remove(os.path.join(self.target, "hooks/worklog.sh"))
         r = self._run_healthcheck()
-        self.assertEqual(r["files_found"], 15)
+        self.assertEqual(r["files_found"], 16)
         self.assertIn("hooks/worklog.sh", r["files_missing"])
 
 
@@ -299,7 +303,7 @@ class TestMissingAllScripts(_Base):
         self._setup_full()
         shutil.rmtree(os.path.join(self.target, "scripts"))
         r = self._run_healthcheck()
-        self.assertEqual(r["files_found"], 11)
+        self.assertEqual(r["files_found"], 12)
         self.assertEqual(len(r["files_missing"]), 5)
 
 
@@ -311,7 +315,7 @@ class TestMissingAllHooks(_Base):
         shutil.rmtree(os.path.join(self.target, "hooks"))
         r = self._run_healthcheck()
         self.assertEqual(r["files_found"], 11)
-        self.assertEqual(len(r["files_missing"]), 5)
+        self.assertEqual(len(r["files_missing"]), 6)
 
 
 class TestMissingAllCommands(_Base):
@@ -321,7 +325,7 @@ class TestMissingAllCommands(_Base):
         self._setup_full()
         shutil.rmtree(os.path.join(self.target, "commands"))
         r = self._run_healthcheck()
-        self.assertEqual(r["files_found"], 12)
+        self.assertEqual(r["files_found"], 13)
 
 
 class TestMissingAllRules(_Base):
@@ -331,7 +335,7 @@ class TestMissingAllRules(_Base):
         self._setup_full()
         shutil.rmtree(os.path.join(self.target, "rules"))
         r = self._run_healthcheck()
-        self.assertEqual(r["files_found"], 15)
+        self.assertEqual(r["files_found"], 16)
 
 
 class TestMissingGitHookFile(_Base):
@@ -341,7 +345,7 @@ class TestMissingGitHookFile(_Base):
         self._setup_full()
         os.remove(os.path.join(self.target, "git-hooks/post-commit"))
         r = self._run_healthcheck()
-        self.assertEqual(r["files_found"], 15)
+        self.assertEqual(r["files_found"], 16)
         self.assertIn("git-hooks/post-commit", r["files_missing"])
         # 연쇄: git hook도 실패
         self.assertNotEqual(r["git_hook"], "ok")
@@ -358,7 +362,7 @@ class TestMissingAllFiles(_Base):
                 os.remove(p)
         r = self._run_healthcheck()
         self.assertEqual(r["files_found"], 0)
-        self.assertEqual(len(r["files_missing"]), 16)
+        self.assertEqual(len(r["files_missing"]), 17)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -373,7 +377,7 @@ class TestMissingWorklogHook(_Base):
         self._setup_full()
         self._remove_hook("worklog.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 4)
+        self.assertEqual(r["hooks_found"], 5)
         self.assertIn("worklog.sh", r["hooks_missing"])
 
 
@@ -384,7 +388,7 @@ class TestMissingOnCommitHook(_Base):
         self._setup_full()
         self._remove_hook("on-commit.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 4)
+        self.assertEqual(r["hooks_found"], 5)
         self.assertIn("on-commit.sh", r["hooks_missing"])
 
 
@@ -395,7 +399,7 @@ class TestMissingSessionEndHook(_Base):
         self._setup_full()
         self._remove_hook("session-end.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 4)
+        self.assertEqual(r["hooks_found"], 5)
         self.assertIn("session-end.sh", r["hooks_missing"])
 
 
@@ -406,7 +410,7 @@ class TestMissingUpdateCheckHook(_Base):
         self._setup_full()
         self._remove_hook("update-check.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 4)
+        self.assertEqual(r["hooks_found"], 5)
         self.assertIn("update-check.sh", r["hooks_missing"])
 
 
@@ -417,7 +421,7 @@ class TestMissingCommitDocCheckHook(_Base):
         self._setup_full()
         self._remove_hook("commit-doc-check.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 4)
+        self.assertEqual(r["hooks_found"], 5)
         self.assertIn("commit-doc-check.sh", r["hooks_missing"])
 
 
@@ -430,7 +434,7 @@ class TestMissingPostToolUseAll(_Base):
         del cfg["hooks"]["PostToolUse"]
         self._write_settings(cfg)
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 2)
+        self.assertEqual(r["hooks_found"], 3)
 
 
 class TestMissingHooksSectionAll(_Base):
@@ -453,7 +457,7 @@ class TestHookRegisteredButFileMissing(_Base):
         os.remove(os.path.join(self.target, "hooks/worklog.sh"))
         r = self._run_healthcheck()
         # hook은 settings.json에 등록돼있으므로 hooks_found는 5
-        self.assertEqual(r["hooks_found"], 5)
+        self.assertEqual(r["hooks_found"], 6)
         # 하지만 파일 누락 경고
         self.assertIn("worklog.sh", r.get("hooks_file_missing", []))
 
@@ -861,7 +865,7 @@ class TestRecoveryFiles(_RecoveryBase):
             "HEALTHCHECK_SETTINGS": os.path.join(target, "settings.json"),
             "HEALTHCHECK_GIT_HOOKS_PATH": os.path.join(target, "git-hooks"),
         })
-        self.assertLess(r["files_found"], 16)
+        self.assertLess(r["files_found"], 17)
         # 재설치
         self._install()
         r2 = self._healthcheck_after_install()

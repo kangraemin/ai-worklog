@@ -562,7 +562,7 @@ class TestHookChaining(_LifecycleBase):
 
 EXPECTED_HOOKS = {
     "post-commit.sh", "worklog.sh", "on-commit.sh",
-    "commit-doc-check.sh", "session-end.sh",
+    "commit-doc-check.sh", "session-end.sh", "stop.sh",
 }
 EXPECTED_SCRIPTS = {
     "worklog-write.sh", "notion-worklog.sh", "notion-migrate-worklogs.sh",

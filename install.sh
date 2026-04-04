@@ -419,6 +419,7 @@ install_file "$PACKAGE_DIR/hooks/session-end.sh"       "$TARGET_DIR/hooks/sessio
 copy_file    "$PACKAGE_DIR/hooks/post-commit.sh"       "$TARGET_DIR/hooks/post-commit.sh"
 copy_file    "$PACKAGE_DIR/hooks/commit-doc-check.sh"         "$TARGET_DIR/hooks/commit-doc-check.sh"
 install_file "$PACKAGE_DIR/hooks/on-commit.sh"         "$TARGET_DIR/hooks/on-commit.sh"
+install_file "$PACKAGE_DIR/hooks/stop.sh"              "$TARGET_DIR/hooks/stop.sh"
 
 # commands (항상 덮어쓰기)
 copy_file "$PACKAGE_DIR/commands/worklog.md"          "$TARGET_DIR/commands/worklog.md"
@@ -441,6 +442,7 @@ chmod +x "$TARGET_DIR/hooks/session-end.sh"
 chmod +x "$TARGET_DIR/hooks/post-commit.sh"
 chmod +x "$TARGET_DIR/hooks/commit-doc-check.sh"
 chmod +x "$TARGET_DIR/hooks/on-commit.sh"
+chmod +x "$TARGET_DIR/hooks/stop.sh"
 
 # ── 버전 SHA 저장 ─────────────────────────────────────────────────────────────
 INSTALLED_SHA=$(git -C "$PACKAGE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -510,6 +512,7 @@ hook_defs = [
     ('PostToolUse',  f'{target_dir}/hooks/commit-doc-check.sh',  5,  False, None),
     ('SessionStart', f'{target_dir}/scripts/update-check.sh',    15, True,  None),
     ('SessionEnd',   f'{target_dir}/hooks/session-end.sh',       15, False, None),
+    ('Stop',         f'{target_dir}/hooks/stop.sh',              15, False, None),
 ]
 
 def add_command_hook(event, command, timeout, is_async, matcher=None):
@@ -531,20 +534,19 @@ def add_command_hook(event, command, timeout, is_async, matcher=None):
 for event, command, timeout, is_async, matcher in hook_defs:
     add_command_hook(event, command, timeout, is_async, matcher)
 
-# ── Stop hook 제거 (기존 설치본 정리용) ──
-STOP_HOOK_MARKERS = ['stop.sh', '/finish']
+# ── 구버전 Stop hook 정리 (finish.sh 등 제거, stop.sh는 유지) ──
+STOP_HOOK_REMOVE = ['/finish']
 
 stop_hooks = hooks.get('Stop', [])
 hooks['Stop'] = [
     g for g in stop_hooks
     if not any(
-        any(m in h.get('command', '') or m in h.get('prompt', '') for m in STOP_HOOK_MARKERS)
+        any(m in h.get('command', '') or m in h.get('prompt', '') for m in STOP_HOOK_REMOVE)
         for h in g.get('hooks', [])
     )
 ]
 if not hooks['Stop']:
     hooks.pop('Stop', None)
-print(f'  ✓ Stop hook removed (worklog uses PostToolUse instead)')
 
 # 저장
 with open(settings_file, 'w', encoding='utf-8') as f:
@@ -719,7 +721,7 @@ echo "  ├─ $(t '언어' 'Language'):  $WORKLOG_LANG"
 if [ -n "$NOTION_DB_ID" ]; then
 echo "  ├─ Notion DB: $NOTION_DB_ID"
 fi
-echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse (3), SessionStart, SessionEnd"
+echo "  ├─ $(t '훅' 'Hooks'):      PostToolUse (3), SessionStart, SessionEnd, Stop"
 if [ "${_MCP_INSTALLED:-}" = "true" ]; then
 echo "  ├─ MCP:        uvx worklog-for-claude (interval: ${DOC_CHECK_INTERVAL:-5})"
 fi
