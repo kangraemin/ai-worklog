@@ -1063,14 +1063,17 @@ class TestUninstall(_Base):
                      "PROJECT_DOC_CHECK_INTERVAL"]:
             self.assertNotIn(key, env, f"{key} should be removed")
 
-    def test_files_deleted(self):
-        """hooks/scripts/commands/rules 파일 삭제"""
+    def test_files_deleted_or_cleaned(self):
+        """hooks/scripts/commands/rules 파일 삭제 또는 마커 블록 제거"""
         self._run_uninstall()
         for rel in ["hooks/post-commit.sh", "hooks/worklog.sh",
                      "scripts/worklog-write.sh", "scripts/token-cost.py",
                      "commands/worklog.md", "rules/worklog-rules.md"]:
             path = os.path.join(self.target, rel)
-            self.assertFalse(os.path.exists(path), f"should be deleted: {rel}")
+            if os.path.exists(path):
+                content = open(path).read()
+                self.assertNotIn("worklog-for-claude start", content,
+                                 f"marker should be removed: {rel}")
 
     def test_env_file_preserved(self):
         """.env 보존"""
@@ -1089,6 +1092,97 @@ class TestUninstall(_Base):
         self._run(["1", "1", "3", "1", "1", "5", "5"])
         r2 = self._run_uninstall()
         self.assertEqual(r2.returncode, 0)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 20-b. Uninstall 마커 블록 보존
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestUninstallMarkerBlock(_Base):
+    """uninstall 시 마커 블록만 제거, 사용자 코드 보존"""
+
+    def setUp(self):
+        super().setUp()
+        self.target = os.path.join(self.tmp, ".claude")
+        # 전역 설치
+        self._run(["1", "1", "3", "1", "1", "5", "5"])
+
+    def _run_uninstall(self) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", UNINSTALL_SCRIPT],
+            capture_output=True,
+            text=True,
+            env=self._env(),
+            cwd=self.tmp,
+            timeout=30,
+        )
+
+    def test_marker_block_removed_content_preserved(self):
+        """사용자 코드 + worklog 마커 블록 → 블록만 제거, 사용자 코드 보존"""
+        stop_sh = os.path.join(self.target, "hooks", "stop.sh")
+        # 사용자 코드 + worklog 마커 블록 공존하는 파일로 교체
+        with open(stop_sh, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write("# 사용자의 커스텀 stop hook\n")
+            f.write("echo 'my custom logic'\n")
+            f.write("\n")
+            f.write("# --- worklog-for-claude start ---\n")
+            f.write("echo 'worklog stuff'\n")
+            f.write("# --- worklog-for-claude end ---\n")
+
+        self._run_uninstall()
+
+        self.assertTrue(os.path.exists(stop_sh), "파일이 보존되어야 함")
+        content = open(stop_sh).read()
+        self.assertNotIn("worklog-for-claude", content)
+        self.assertIn("my custom logic", content)
+
+    def test_marker_only_file_fully_deleted(self):
+        """shebang + 마커 블록만 있는 파일 → 전체 삭제"""
+        stop_sh = os.path.join(self.target, "hooks", "stop.sh")
+        with open(stop_sh, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write("# --- worklog-for-claude start ---\n")
+            f.write("echo 'worklog only'\n")
+            f.write("# --- worklog-for-claude end ---\n")
+
+        self._run_uninstall()
+
+        self.assertFalse(os.path.exists(stop_sh), "전용 파일은 전체 삭제")
+
+    def test_no_marker_dedicated_file_deleted(self):
+        """마커 없는 전용 파일 → 전체 삭제"""
+        worklog_md = os.path.join(self.target, "commands", "worklog.md")
+        self.assertTrue(os.path.exists(worklog_md))
+
+        self._run_uninstall()
+
+        self.assertFalse(os.path.exists(worklog_md), "전용 파일 삭제")
+
+    def test_user_file_without_marker_not_in_list(self):
+        """WORKLOG_FILES 목록에 없는 사용자 파일은 건드리지 않음"""
+        user_hook = os.path.join(self.target, "hooks", "my-custom-hook.sh")
+        os.makedirs(os.path.dirname(user_hook), exist_ok=True)
+        with open(user_hook, "w") as f:
+            f.write("#!/bin/bash\necho 'user hook'\n")
+
+        self._run_uninstall()
+
+        self.assertTrue(os.path.exists(user_hook), "사용자 파일 보존")
+        self.assertIn("user hook", open(user_hook).read())
+
+    def test_settings_hooks_cleaned(self):
+        """마커 블록 uninstall 후에도 settings.json hook 정리됨"""
+        self._run_uninstall()
+        cfg = self._settings()
+        hooks = cfg.get("hooks", {})
+        for event, groups in hooks.items():
+            for g in groups:
+                for h in g.get("hooks", []):
+                    cmd = h.get("command", "")
+                    self.assertNotIn("stop.sh", cmd)
+                    self.assertNotIn("worklog.sh", cmd)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

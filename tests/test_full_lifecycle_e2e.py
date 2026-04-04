@@ -664,16 +664,21 @@ class TestUninstallFull(_LifecycleBase):
         r2 = self._uninstall(cwd=self.repo)
         self.assertEqual(r2.returncode, 0, f"uninstall failed: {r2.stderr}")
 
-    def test_all_worklog_files_gone(self):
+    def test_all_worklog_files_gone_or_cleaned(self):
+        """worklog 파일이 삭제되거나, 남아있으면 마커 블록이 제거됨"""
         for subdir in ["hooks", "scripts", "commands", "rules"]:
             d = os.path.join(self.target, subdir)
-            if os.path.isdir(d):
-                files = os.listdir(d)
-                for f in files:
-                    self.assertFalse(
-                        f.endswith(".sh") or f.endswith(".py") or f.endswith(".md"),
-                        f"worklog file should be gone: {subdir}/{f}",
-                    )
+            if not os.path.isdir(d):
+                continue
+            for f in os.listdir(d):
+                fpath = os.path.join(d, f)
+                if not os.path.isfile(fpath):
+                    continue
+                content = open(fpath).read()
+                self.assertNotIn(
+                    "worklog-for-claude start", content,
+                    f"worklog marker should be removed: {subdir}/{f}",
+                )
 
     def test_settings_hooks_clean(self):
         cfg = self._settings(self.target)

@@ -79,18 +79,38 @@ WORKLOG_FILES=(
 )
 
 REMOVED=0
+PRESERVED=0
 for rel_path in "${WORKLOG_FILES[@]}"; do
   full_path="$TARGET_DIR/$rel_path"
-  if [ -f "$full_path" ]; then
+  [ -f "$full_path" ] || continue
+
+  # .bak 파일 제거
+  rm -f "${full_path}.bak"
+
+  if grep -q "worklog-for-claude start" "$full_path" 2>/dev/null; then
+    # 마커 블록 제거
+    sed '/# --- worklog-for-claude start ---/,/# --- worklog-for-claude end ---/d' "$full_path" > "${full_path}.tmp"
+    mv "${full_path}.tmp" "$full_path"
+
+    # 남은 내용 확인 (shebang + 빈줄 + 주석만 남으면 전체 삭제)
+    has_content=$(grep -v '^#!' "$full_path" | grep -v '^\s*$' | grep -v '^\s*#' | head -1 || true)
+    if [ -z "$has_content" ]; then
+      rm -f "$full_path"
+      ok "  $rel_path"
+      REMOVED=$((REMOVED + 1))
+    else
+      ok "  $rel_path (마커 블록만 제거)"
+      PRESERVED=$((PRESERVED + 1))
+    fi
+  else
+    # 마커 없음 → 전체 삭제
     rm -f "$full_path"
-    # .bak 파일도 제거
-    rm -f "${full_path}.bak"
     ok "  $rel_path"
     REMOVED=$((REMOVED + 1))
   fi
 done
 
-info "$REMOVED files removed"
+info "$REMOVED files removed, $PRESERVED files preserved (marker block only)"
 
 # ── settings.json에서 worklog hooks/env 제거 ────────────────────────────────
 header "settings.json 정리"
