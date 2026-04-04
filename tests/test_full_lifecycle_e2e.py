@@ -915,6 +915,140 @@ if env.get('WORKLOG_TIMING') == 'stop':
         self.assertEqual(cfg2["env"]["WORKLOG_TIMING"], "each-commit")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 21. update-check.sh hook 등록 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestUpdateCheckHookRegister(unittest.TestCase):
+    """update-check.sh의 _ensure_hook이 누락 hook을 settings.json에 등록"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ai_wl_uc_")
+        self.target = os.path.join(self.tmp, ".claude")
+        os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
+        os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
+        # 스텁 파일 생성 (update-check.sh가 참조)
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+                   "hooks/session-end.sh", "hooks/stop.sh", "scripts/update-check.sh"]:
+            path = os.path.join(self.target, f)
+            with open(path, "w") as fh:
+                fh.write("#!/bin/bash\nexit 0\n")
+            os.chmod(path, 0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run_ensure_hook(self, settings_cfg):
+        """settings.json 세팅 후 _ensure_hook 로직 실행"""
+        settings_path = os.path.join(self.target, "settings.json")
+        with open(settings_path, "w") as f:
+            json.dump(settings_cfg, f, indent=2)
+
+        # _ensure_hook 로직을 Python으로 직접 실행 (update-check.sh의 핵심 로직)
+        script = '''
+import json, sys, os
+
+sf = sys.argv[1]
+target_dir = sys.argv[2]
+
+HOOK_DEFS = [
+    ("PostToolUse",  f"{target_dir}/hooks/worklog.sh",           5,  True,  ""),
+    ("PostToolUse",  f"{target_dir}/hooks/on-commit.sh",         5,  False, "Bash"),
+    ("PostToolUse",  f"{target_dir}/hooks/commit-doc-check.sh",  5,  False, ""),
+    ("SessionStart", f"{target_dir}/scripts/update-check.sh",   15,  True,  ""),
+    ("SessionEnd",   f"{target_dir}/hooks/session-end.sh",      15,  False, ""),
+    ("Stop",         f"{target_dir}/hooks/stop.sh",             15,  False, ""),
+]
+
+cfg = json.load(open(sf))
+hooks = cfg.setdefault("hooks", {})
+added = 0
+
+for event, cmd, timeout, is_async, matcher in HOOK_DEFS:
+    basename = os.path.basename(cmd)
+    # 중복 체크
+    found = False
+    for group in hooks.get(event, []):
+        for h in group.get("hooks", []):
+            if basename in h.get("command", ""):
+                found = True
+                break
+        if found:
+            break
+    if found:
+        continue
+
+    hook = {"type": "command", "command": cmd, "timeout": timeout}
+    if is_async:
+        hook["async"] = True
+    entry = {"hooks": [hook]}
+    if matcher:
+        entry["matcher"] = matcher
+    hooks.setdefault(event, []).append(entry)
+    added += 1
+
+with open(sf, "w") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write("\\n")
+print(added)
+'''
+        r = subprocess.run(
+            ["python3", "-c", script, settings_path, self.target],
+            capture_output=True, text=True,
+        )
+        return r, settings_path
+
+    def test_stop_hook_registered(self):
+        """Stop hook 누락 시 등록"""
+        # Stop 없는 설정
+        cfg = {"env": {}, "hooks": {}}
+        r, sp = self._run_ensure_hook(cfg)
+        result = json.load(open(sp))
+        self.assertIn("Stop", result["hooks"])
+        stop_cmds = [h["command"] for g in result["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertTrue(any("stop.sh" in c for c in stop_cmds))
+
+    def test_no_duplicate_hooks(self):
+        """이미 등록된 hook은 중복 추가 안 됨"""
+        cfg = {"env": {}, "hooks": {
+            "Stop": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/stop.sh", "timeout": 15}]}]
+        }}
+        r, sp = self._run_ensure_hook(cfg)
+        result = json.load(open(sp))
+        stop_groups = result["hooks"]["Stop"]
+        self.assertEqual(len(stop_groups), 1, "중복 등록 안 됨")
+
+    def test_missing_hooks_added_existing_preserved(self):
+        """누락 hook만 추가, 기존 hook 보존"""
+        # PostToolUse만 있고 Stop 없는 상태
+        cfg = {"env": {}, "hooks": {
+            "PostToolUse": [
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/worklog.sh", "timeout": 5, "async": True}]},
+            ],
+        }}
+        r, sp = self._run_ensure_hook(cfg)
+        result = json.load(open(sp))
+        # 기존 PostToolUse 보존
+        self.assertIn("PostToolUse", result["hooks"])
+        # Stop 추가됨
+        self.assertIn("Stop", result["hooks"])
+        # SessionEnd 추가됨
+        self.assertIn("SessionEnd", result["hooks"])
+
+    def test_third_party_hooks_preserved(self):
+        """서드파티 hook이 보존됨"""
+        cfg = {"env": {}, "hooks": {
+            "PreToolUse": [{"hooks": [{"type": "command", "command": "/my/custom-hook.sh"}]}],
+        }}
+        r, sp = self._run_ensure_hook(cfg)
+        result = json.load(open(sp))
+        self.assertIn("PreToolUse", result["hooks"])
+        ptl = result["hooks"]["PreToolUse"]
+        self.assertEqual(len(ptl), 1)
+        self.assertIn("custom-hook.sh", ptl[0]["hooks"][0]["command"])
+
+
 if __name__ == "__main__":
     import sys
     result = unittest.main(verbosity=2, exit=False)

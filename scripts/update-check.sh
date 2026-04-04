@@ -191,26 +191,42 @@ for _sf in "$HOME/.claude/settings.json" ${REPO_ROOT:+"$REPO_ROOT/.claude/settin
   [ "$result" = "migrated" ] && echo -e "${_G}✓${_N}  WORKLOG_TIMING: stop → each-commit ($_sf)" >&2
 done
 
-# ── post-update: SessionStart hook 등록 ──────────────────────────────────────
-_register_session_start() {
-  local sf="$1"
+# ── post-update: 누락 hook 등록 ──────────────────────────────────────────────
+_ensure_hook() {
+  local sf="$1" event="$2" cmd="$3" timeout="$4" is_async="$5" matcher="${6:-}"
   [ -f "$sf" ] || return 0
-  local cmd="$AI_WORKLOG_DIR/scripts/update-check.sh"
-  grep -q "update-check.sh" "$sf" 2>/dev/null && return 0
+  local basename
+  basename=$(basename "$cmd")
+  grep -q "$basename" "$sf" 2>/dev/null && return 0
   $PYTHON -c "
 import json, sys
-sf, cmd = sys.argv[1], sys.argv[2]
+sf, event, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+timeout, is_async, matcher = int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[6]
 cfg = json.load(open(sf))
 hooks = cfg.setdefault('hooks', {})
-ss = hooks.setdefault('SessionStart', [])
-ss.append({'hooks': [{'type': 'command', 'command': cmd, 'timeout': 15, 'async': True}]})
-json.dump(cfg, open(sf, 'w'), indent=2, ensure_ascii=False)
-print('\n')
-" "$sf" "$cmd" 2>/dev/null
-  echo -e "${_G}✓${_N}  SessionStart hook 등록" >&2
+entries = hooks.setdefault(event, [])
+hook = {'type': 'command', 'command': cmd, 'timeout': timeout}
+if is_async:
+    hook['async'] = True
+entry = {'hooks': [hook]}
+if matcher:
+    entry['matcher'] = matcher
+entries.append(entry)
+with open(sf, 'w') as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+print('added')
+" "$sf" "$event" "$cmd" "$timeout" "$is_async" "$matcher" 2>/dev/null
+  echo -e "${_G}✓${_N}  ${event} hook 등록: $basename" >&2
 }
 
-_register_session_start "$HOME/.claude/settings.json" || true
+SETTINGS="$HOME/.claude/settings.json"
+_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/worklog.sh"           5  true  ""     || true
+_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/on-commit.sh"         5  false "Bash" || true
+_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/commit-doc-check.sh"  5  false ""     || true
+_ensure_hook "$SETTINGS" "SessionStart" "$AI_WORKLOG_DIR/scripts/update-check.sh"   15  true  ""     || true
+_ensure_hook "$SETTINGS" "SessionEnd"   "$AI_WORKLOG_DIR/hooks/session-end.sh"      15  false ""     || true
+_ensure_hook "$SETTINGS" "Stop"         "$AI_WORKLOG_DIR/hooks/stop.sh"             15  false ""     || true
 
 # ── post-update: git hook 재설치 ──────────────────────────────────────────────
 HOOK_SRC="$AI_WORKLOG_DIR/git-hooks/post-commit"
