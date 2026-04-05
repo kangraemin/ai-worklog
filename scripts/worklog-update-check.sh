@@ -69,7 +69,8 @@ if git rev-parse --is-inside-work-tree &>/dev/null; then
   if [ ! -f "$_PROJ_ROOT/PROJECT.md" ] && [ ! -f "$_PROMPTED" ]; then
     mkdir -p "$_PROJ_ROOT/.claude"
     touch "$_PROMPTED"
-    echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"PROJECT.md가 없습니다. /update-project 를 실행하면 프로젝트 문서가 자동 생성됩니다. 사용자에게 실행 여부를 물어보세요."}}'
+    printf 'PROJECT.md가 없습니다. /update-project 를 실행하면 프로젝트 문서가 자동 생성됩니다. 사용자에게 실행할지 물어보세요.\n'
+    exit 0
   fi
 fi
 
