@@ -1160,6 +1160,97 @@ class TestEnsureHookRunsWhenThrottled(unittest.TestCase):
         self.assertEqual(len(stop_groups), 1, "중복 등록 안 됨")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 23. update-check.sh PROJECT.md 생성 안내 (설치 후 첫 세션만)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestProjectMdPrompt(unittest.TestCase):
+    """설치 후 첫 세션에서 PROJECT.md 없으면 안내, 마커 삭제"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ai_wl_pmd_")
+        self.target = os.path.join(self.tmp, ".claude")
+        os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
+        os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
+        # 스텁 파일 생성
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+                   "hooks/session-end.sh", "hooks/stop.sh", "scripts/update-check.sh"]:
+            path = os.path.join(self.target, f)
+            with open(path, "w") as fh:
+                fh.write("#!/bin/bash\nexit 0\n")
+            os.chmod(path, 0o755)
+        # settings.json (모든 hook 등록 상태)
+        settings_path = os.path.join(self.target, "settings.json")
+        cfg = {"env": {}, "hooks": {
+            "Stop": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/stop.sh", "timeout": 15}]}],
+            "PostToolUse": [
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/worklog.sh", "timeout": 5, "async": True}]},
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/on-commit.sh", "timeout": 5}], "matcher": "Bash"},
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/commit-doc-check.sh", "timeout": 5}]},
+            ],
+            "SessionStart": [{"hooks": [{"type": "command", "command": f"{self.target}/scripts/update-check.sh", "timeout": 15, "async": True}]}],
+            "SessionEnd": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/session-end.sh", "timeout": 15}]}],
+        }}
+        with open(settings_path, "w") as f:
+            json.dump(cfg, f, indent=2)
+        # throttle 활성 (네트워크 호출 방지)
+        import time
+        checked_file = os.path.join(self.target, ".version-checked")
+        with open(checked_file, "w") as f:
+            f.write(str(int(time.time())))
+        version_file = os.path.join(self.target, ".version")
+        with open(version_file, "w") as f:
+            f.write("abc1234")
+        # cwd용 임시 디렉토리 (PROJECT.md 체크 대상)
+        self.workdir = os.path.join(self.tmp, "project")
+        os.makedirs(self.workdir, exist_ok=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run_update_check(self):
+        update_script = os.path.join(PACKAGE_DIR, "scripts", "update-check.sh")
+        env = {
+            "HOME": self.tmp,
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "TERM": "dumb",
+            "AI_WORKLOG_DIR": self.target,
+        }
+        return subprocess.run(
+            ["bash", update_script],
+            capture_output=True, text=True,
+            cwd=self.workdir,
+            env=env,
+            timeout=10,
+        )
+
+    def test_marker_exists_no_project_md(self):
+        """마커 있고 PROJECT.md 없음 → 안내 출력 + 마커 삭제"""
+        marker = os.path.join(self.target, ".project-md-prompt")
+        with open(marker, "w") as f:
+            f.write("")
+        r = self._run_update_check()
+        self.assertIn("/update-project", r.stdout)
+        self.assertFalse(os.path.exists(marker))
+
+    def test_marker_exists_with_project_md(self):
+        """마커 있고 PROJECT.md 있음 → 안내 없음 + 마커 삭제"""
+        marker = os.path.join(self.target, ".project-md-prompt")
+        with open(marker, "w") as f:
+            f.write("")
+        with open(os.path.join(self.workdir, "PROJECT.md"), "w") as f:
+            f.write("# Project\n")
+        r = self._run_update_check()
+        self.assertNotIn("/update-project", r.stdout)
+        self.assertFalse(os.path.exists(marker))
+
+    def test_no_marker(self):
+        """마커 없음 → 안내 없음"""
+        r = self._run_update_check()
+        self.assertNotIn("/update-project", r.stdout)
+
+
 if __name__ == "__main__":
     import sys
     result = unittest.main(verbosity=2, exit=False)

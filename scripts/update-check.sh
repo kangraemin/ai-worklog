@@ -62,6 +62,15 @@ _ensure_hook "$SETTINGS" "SessionStart" "$AI_WORKLOG_DIR/scripts/update-check.sh
 _ensure_hook "$SETTINGS" "SessionEnd"   "$AI_WORKLOG_DIR/hooks/session-end.sh"      15  false ""     || true
 _ensure_hook "$SETTINGS" "Stop"         "$AI_WORKLOG_DIR/hooks/stop.sh"             15  false ""     || true
 
+# ── PROJECT.md 생성 안내 (설치 후 첫 세션만) ─────────────────────────────────
+_PROJECT_PROMPT="$AI_WORKLOG_DIR/.project-md-prompt"
+if [ -f "$_PROJECT_PROMPT" ]; then
+  rm -f "$_PROJECT_PROMPT"
+  if [ ! -f "PROJECT.md" ]; then
+    echo "💡 PROJECT.md가 없습니다. /update-project 를 실행하면 프로젝트 문서가 자동 생성됩니다."
+  fi
+fi
+
 # ── 24시간 throttle ───────────────────────────────────────────────────────────
 if [ "$FORCE" = false ] && [ -f "$CHECKED_FILE" ]; then
   LAST=$(cat "$CHECKED_FILE" 2>/dev/null || echo 0)

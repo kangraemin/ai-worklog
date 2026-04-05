@@ -207,6 +207,12 @@ class TestFreshGitInstall(_Base):
         self._run(self._BASE)
         self.assertNotIn("NOTION_DB_ID", self._settings()["env"])
 
+    def test_project_md_prompt_marker_created(self):
+        """설치 후 .project-md-prompt 마커 파일 생성"""
+        self._run(self._BASE)
+        marker = os.path.join(self.tmp, ".claude", ".project-md-prompt")
+        self.assertTrue(os.path.exists(marker), ".project-md-prompt 마커 파일이 생성되어야 함")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. 신규 설치 — Notion 모드 (기존 인증정보 사전 주입)
