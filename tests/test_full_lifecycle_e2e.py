@@ -1049,6 +1049,117 @@ print(added)
         self.assertIn("custom-hook.sh", ptl[0]["hooks"][0]["command"])
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 22. update-check.sh throttle 상태에서도 _ensure_hook 실행 검증
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestEnsureHookRunsWhenThrottled(unittest.TestCase):
+    """throttle(24시간 이내 재실행)이 걸려도 _ensure_hook이 실행되는지 검증"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ai_wl_thr_")
+        self.target = os.path.join(self.tmp, ".claude")
+        os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
+        os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
+        # 스텁 파일 생성
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+                   "hooks/session-end.sh", "hooks/stop.sh", "scripts/update-check.sh"]:
+            path = os.path.join(self.target, f)
+            with open(path, "w") as fh:
+                fh.write("#!/bin/bash\nexit 0\n")
+            os.chmod(path, 0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_ensure_hook_runs_even_when_throttled(self):
+        """throttle 활성 상태에서 update-check.sh 실행 → 누락 hook 복구"""
+        import time
+
+        # settings.json: Stop hook 누락 상태
+        settings_path = os.path.join(self.target, "settings.json")
+        cfg = {"env": {}, "hooks": {}}
+        with open(settings_path, "w") as f:
+            json.dump(cfg, f, indent=2)
+
+        # .version-checked: 현재 시간 (throttle 활성화)
+        checked_file = os.path.join(self.target, ".version-checked")
+        with open(checked_file, "w") as f:
+            f.write(str(int(time.time())))
+
+        # .version: 임의 SHA
+        version_file = os.path.join(self.target, ".version")
+        with open(version_file, "w") as f:
+            f.write("abc1234")
+
+        # update-check.sh 실행 (throttle에서 exit하므로 네트워크 미사용)
+        update_script = os.path.join(PACKAGE_DIR, "scripts", "update-check.sh")
+        env = {
+            "HOME": self.tmp,
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "TERM": "dumb",
+            "AI_WORKLOG_DIR": self.target,
+        }
+        r = subprocess.run(
+            ["bash", update_script],
+            capture_output=True, text=True,
+            env=env,
+            timeout=10,
+        )
+
+        # settings.json에 Stop hook이 추가되었는지 검증
+        result = json.load(open(settings_path))
+        self.assertIn("Stop", result.get("hooks", {}),
+                       "throttle 상태에서도 누락 Stop hook이 복구되어야 함")
+        stop_cmds = [h["command"] for g in result["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertTrue(any("stop.sh" in c for c in stop_cmds))
+
+    def test_no_duplicate_when_throttled(self):
+        """throttle 활성 + hook 이미 있으면 중복 추가 안 됨"""
+        import time
+
+        settings_path = os.path.join(self.target, "settings.json")
+        cfg = {"env": {}, "hooks": {
+            "Stop": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/stop.sh", "timeout": 15}]}],
+            "PostToolUse": [
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/worklog.sh", "timeout": 5, "async": True}]},
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/on-commit.sh", "timeout": 5}], "matcher": "Bash"},
+                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/commit-doc-check.sh", "timeout": 5}]},
+            ],
+            "SessionStart": [{"hooks": [{"type": "command", "command": f"{self.target}/scripts/update-check.sh", "timeout": 15, "async": True}]}],
+            "SessionEnd": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/session-end.sh", "timeout": 15}]}],
+        }}
+        with open(settings_path, "w") as f:
+            json.dump(cfg, f, indent=2)
+
+        checked_file = os.path.join(self.target, ".version-checked")
+        with open(checked_file, "w") as f:
+            f.write(str(int(time.time())))
+
+        version_file = os.path.join(self.target, ".version")
+        with open(version_file, "w") as f:
+            f.write("abc1234")
+
+        update_script = os.path.join(PACKAGE_DIR, "scripts", "update-check.sh")
+        env = {
+            "HOME": self.tmp,
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "TERM": "dumb",
+            "AI_WORKLOG_DIR": self.target,
+        }
+        subprocess.run(
+            ["bash", update_script],
+            capture_output=True, text=True,
+            env=env,
+            timeout=10,
+        )
+
+        result = json.load(open(settings_path))
+        stop_groups = result["hooks"]["Stop"]
+        self.assertEqual(len(stop_groups), 1, "중복 등록 안 됨")
+
+
 if __name__ == "__main__":
     import sys
     result = unittest.main(verbosity=2, exit=False)

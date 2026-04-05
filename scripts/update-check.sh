@@ -25,6 +25,43 @@ for arg in "$@"; do
   esac
 done
 
+# ── 누락 hook 검증 (매 세션) ──────────────────────────────────────────────────
+_ensure_hook() {
+  local sf="$1" event="$2" cmd="$3" timeout="$4" is_async="$5" matcher="${6:-}"
+  [ -f "$sf" ] || return 0
+  local basename
+  basename=$(basename "$cmd")
+  grep -q "$basename" "$sf" 2>/dev/null && return 0
+  $PYTHON -c "
+import json, sys
+sf, event, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+timeout, is_async, matcher = int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[6]
+cfg = json.load(open(sf))
+hooks = cfg.setdefault('hooks', {})
+entries = hooks.setdefault(event, [])
+hook = {'type': 'command', 'command': cmd, 'timeout': timeout}
+if is_async:
+    hook['async'] = True
+entry = {'hooks': [hook]}
+if matcher:
+    entry['matcher'] = matcher
+entries.append(entry)
+with open(sf, 'w') as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+print('added')
+" "$sf" "$event" "$cmd" "$timeout" "$is_async" "$matcher" 2>/dev/null
+  echo -e "${_G:-}✓${_N:-}  ${event} hook 등록: $basename" >&2
+}
+
+SETTINGS="$HOME/.claude/settings.json"
+_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/worklog.sh"           5  true  ""     || true
+_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/on-commit.sh"         5  false "Bash" || true
+_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/commit-doc-check.sh"  5  false ""     || true
+_ensure_hook "$SETTINGS" "SessionStart" "$AI_WORKLOG_DIR/scripts/update-check.sh"   15  true  ""     || true
+_ensure_hook "$SETTINGS" "SessionEnd"   "$AI_WORKLOG_DIR/hooks/session-end.sh"      15  false ""     || true
+_ensure_hook "$SETTINGS" "Stop"         "$AI_WORKLOG_DIR/hooks/stop.sh"             15  false ""     || true
+
 # ── 24시간 throttle ───────────────────────────────────────────────────────────
 if [ "$FORCE" = false ] && [ -f "$CHECKED_FILE" ]; then
   LAST=$(cat "$CHECKED_FILE" 2>/dev/null || echo 0)
@@ -189,43 +226,6 @@ for _sf in "$HOME/.claude/settings.json" ${REPO_ROOT:+"$REPO_ROOT/.claude/settin
   result=$(_migrate_timing "$_sf")
   [ "$result" = "migrated" ] && echo -e "${_G}✓${_N}  WORKLOG_TIMING: each-commit → stop ($_sf)" >&2
 done
-
-# ── post-update: 누락 hook 등록 ──────────────────────────────────────────────
-_ensure_hook() {
-  local sf="$1" event="$2" cmd="$3" timeout="$4" is_async="$5" matcher="${6:-}"
-  [ -f "$sf" ] || return 0
-  local basename
-  basename=$(basename "$cmd")
-  grep -q "$basename" "$sf" 2>/dev/null && return 0
-  $PYTHON -c "
-import json, sys
-sf, event, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
-timeout, is_async, matcher = int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[6]
-cfg = json.load(open(sf))
-hooks = cfg.setdefault('hooks', {})
-entries = hooks.setdefault(event, [])
-hook = {'type': 'command', 'command': cmd, 'timeout': timeout}
-if is_async:
-    hook['async'] = True
-entry = {'hooks': [hook]}
-if matcher:
-    entry['matcher'] = matcher
-entries.append(entry)
-with open(sf, 'w') as f:
-    json.dump(cfg, f, indent=2, ensure_ascii=False)
-    f.write('\n')
-print('added')
-" "$sf" "$event" "$cmd" "$timeout" "$is_async" "$matcher" 2>/dev/null
-  echo -e "${_G}✓${_N}  ${event} hook 등록: $basename" >&2
-}
-
-SETTINGS="$HOME/.claude/settings.json"
-_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/worklog.sh"           5  true  ""     || true
-_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/on-commit.sh"         5  false "Bash" || true
-_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/commit-doc-check.sh"  5  false ""     || true
-_ensure_hook "$SETTINGS" "SessionStart" "$AI_WORKLOG_DIR/scripts/update-check.sh"   15  true  ""     || true
-_ensure_hook "$SETTINGS" "SessionEnd"   "$AI_WORKLOG_DIR/hooks/session-end.sh"      15  false ""     || true
-_ensure_hook "$SETTINGS" "Stop"         "$AI_WORKLOG_DIR/hooks/stop.sh"             15  false ""     || true
 
 # ── post-update: git hook 재설치 ──────────────────────────────────────────────
 HOOK_SRC="$AI_WORKLOG_DIR/git-hooks/post-commit"
