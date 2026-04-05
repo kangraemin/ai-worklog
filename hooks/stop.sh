@@ -46,7 +46,7 @@ if [ -d "$PENDING_DIR" ]; then
 fi
 
 if [ -n "$PENDING_INFO" ]; then
-  REASON=$(printf "/worklog 스킬을 실행해서 워크로그를 작성해줘.\n\n미처리 커밋:\n%s" "$PENDING_INFO")
+  REASON=$(printf "/worklog 스킬을 실행해서 워크로그를 작성해줘.\n\n워크로그 대상 커밋:\n%s" "$PENDING_INFO")
   jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
   exit 0
 fi
