@@ -724,7 +724,4 @@ echo ""
 echo -e "  ${BOLD}$(t '재설정' 'Reconfigure')${NC}"
 echo "  • $PACKAGE_DIR/install.sh --reconfigure"
 echo ""
-# PROJECT.md 생성 안내 마커 (첫 세션에서 안내 후 삭제)
-touch "$TARGET_DIR/.project-md-prompt"
-
 ok "$(t 'worklog-for-claude 설치가 완료되었습니다!' 'worklog-for-claude installed successfully!')"

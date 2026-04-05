@@ -1161,12 +1161,12 @@ class TestEnsureHookRunsWhenThrottled(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 23. update-check.sh PROJECT.md 생성 안내 (설치 후 첫 세션만)
+# 23. update-check.sh PROJECT.md 생성 안내 (프로젝트별 1회)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
 class TestProjectMdPrompt(unittest.TestCase):
-    """설치 후 첫 세션에서 PROJECT.md 없으면 안내, 마커 삭제"""
+    """프로젝트별로 PROJECT.md 없으면 한 번 안내, 플래그로 재안내 방지"""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="ai_wl_pmd_")
@@ -1202,9 +1202,17 @@ class TestProjectMdPrompt(unittest.TestCase):
         version_file = os.path.join(self.target, ".version")
         with open(version_file, "w") as f:
             f.write("abc1234")
-        # cwd용 임시 디렉토리 (PROJECT.md 체크 대상)
+        # git repo 생성 (PROJECT.md 체크 대상)
         self.workdir = os.path.join(self.tmp, "project")
         os.makedirs(self.workdir, exist_ok=True)
+        git_env = {
+            "HOME": self.tmp,
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "GIT_CONFIG_NOSYSTEM": "1",
+        }
+        subprocess.run(["git", "init", self.workdir], capture_output=True, check=True, env=git_env)
+        subprocess.run(["git", "-C", self.workdir, "config", "user.email", "test@test.com"], capture_output=True, env=git_env)
+        subprocess.run(["git", "-C", self.workdir, "config", "user.name", "Test"], capture_output=True, env=git_env)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -1216,6 +1224,7 @@ class TestProjectMdPrompt(unittest.TestCase):
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "TERM": "dumb",
             "AI_WORKLOG_DIR": self.target,
+            "GIT_CONFIG_NOSYSTEM": "1",
         }
         return subprocess.run(
             ["bash", update_script],
@@ -1225,28 +1234,28 @@ class TestProjectMdPrompt(unittest.TestCase):
             timeout=10,
         )
 
-    def test_marker_exists_no_project_md(self):
-        """마커 있고 PROJECT.md 없음 → 안내 출력 + 마커 삭제"""
-        marker = os.path.join(self.target, ".project-md-prompt")
-        with open(marker, "w") as f:
-            f.write("")
+    def test_no_project_md_no_flag(self):
+        """git repo + PROJECT.md 없음 + 플래그 없음 → 안내 출력 + 플래그 생성"""
         r = self._run_update_check()
         self.assertIn("/update-project", r.stdout)
-        self.assertFalse(os.path.exists(marker))
+        flag = os.path.join(self.workdir, ".claude", ".project-md-prompted")
+        self.assertTrue(os.path.exists(flag))
 
-    def test_marker_exists_with_project_md(self):
-        """마커 있고 PROJECT.md 있음 → 안내 없음 + 마커 삭제"""
-        marker = os.path.join(self.target, ".project-md-prompt")
-        with open(marker, "w") as f:
-            f.write("")
+    def test_project_md_exists(self):
+        """git repo + PROJECT.md 있음 → 안내 없음 + 플래그 미생성"""
         with open(os.path.join(self.workdir, "PROJECT.md"), "w") as f:
             f.write("# Project\n")
         r = self._run_update_check()
         self.assertNotIn("/update-project", r.stdout)
-        self.assertFalse(os.path.exists(marker))
+        flag = os.path.join(self.workdir, ".claude", ".project-md-prompted")
+        self.assertFalse(os.path.exists(flag))
 
-    def test_no_marker(self):
-        """마커 없음 → 안내 없음"""
+    def test_flag_exists_no_repeat(self):
+        """git repo + PROJECT.md 없음 + 플래그 있음 → 안내 없음"""
+        flag_dir = os.path.join(self.workdir, ".claude")
+        os.makedirs(flag_dir, exist_ok=True)
+        with open(os.path.join(flag_dir, ".project-md-prompted"), "w") as f:
+            f.write("")
         r = self._run_update_check()
         self.assertNotIn("/update-project", r.stdout)
 
