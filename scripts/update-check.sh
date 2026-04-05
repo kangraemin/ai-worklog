@@ -74,7 +74,7 @@ if git rev-parse --is-inside-work-tree &>/dev/null; then
 fi
 
 # ── 24시간 throttle ───────────────────────────────────────────────────────────
-if [ "$FORCE" = false ] && [ -f "$CHECKED_FILE" ]; then
+if [ "$FORCE" = false ] && [ "$CHECK_ONLY" = false ] && [ -f "$CHECKED_FILE" ]; then
   LAST=$(cat "$CHECKED_FILE" 2>/dev/null || echo 0)
   NOW=$(date +%s)
   DIFF=$(( NOW - LAST ))

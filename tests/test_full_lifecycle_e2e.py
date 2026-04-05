@@ -1161,6 +1161,72 @@ class TestEnsureHookRunsWhenThrottled(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 22-b. --check-only는 throttle 무시
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCheckOnlySkipsThrottle(unittest.TestCase):
+    """--check-only는 throttle을 무시하고 항상 API 호출"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ai_wl_co_")
+        self.target = os.path.join(self.tmp, ".claude")
+        os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
+        os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+                   "hooks/session-end.sh", "hooks/stop.sh", "scripts/update-check.sh"]:
+            path = os.path.join(self.target, f)
+            with open(path, "w") as fh:
+                fh.write("#!/bin/bash\nexit 0\n")
+            os.chmod(path, 0o755)
+        settings_path = os.path.join(self.target, "settings.json")
+        with open(settings_path, "w") as f:
+            json.dump({"env": {}, "hooks": {}}, f, indent=2)
+        # throttle 활성
+        import time
+        with open(os.path.join(self.target, ".version-checked"), "w") as f:
+            f.write(str(int(time.time())))
+        with open(os.path.join(self.target, ".version"), "w") as f:
+            f.write("abc1234")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, *args):
+        update_script = os.path.join(PACKAGE_DIR, "scripts", "update-check.sh")
+        env = {
+            "HOME": self.tmp,
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "TERM": "dumb",
+            "AI_WORKLOG_DIR": self.target,
+        }
+        return subprocess.run(
+            ["bash", update_script, *args],
+            capture_output=True, text=True,
+            env=env,
+            timeout=15,
+        )
+
+    def test_plain_run_throttled(self):
+        """플래그 없는 일반 실행은 throttle에 걸려 버전 정보 없음"""
+        r = self._run()
+        self.assertNotIn("installed", r.stdout)
+        self.assertNotIn("status", r.stdout)
+
+    def test_check_only_bypasses_throttle(self):
+        """--check-only는 throttle 무시하고 버전 출력"""
+        r = self._run("--check-only")
+        # API 호출 실패해도 최소한 installed 줄은 출력되어야 함
+        # (네트워크 없으면 exit 0으로 조용히 종료할 수 있으므로, installed 출력 여부로 판별)
+        # throttle을 통과했다는 것은 "exit 0 at throttle" 하지 않았다는 뜻
+        # throttle 통과 후 API 실패 시에도 exit 0이지만 출력 없음
+        # 대신: throttle에 걸렸으면 절대 installed가 안 나옴
+        # 네트워크 성공이면 installed/latest/status 출력됨
+        # 여기서는 GitHub API 접근 가능하므로 status 출력 기대
+        self.assertIn("installed", r.stdout)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 23. update-check.sh PROJECT.md 생성 안내 (프로젝트별 1회)
 # ══════════════════════════════════════════════════════════════════════════════
 
