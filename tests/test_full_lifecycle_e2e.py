@@ -562,7 +562,7 @@ class TestHookChaining(_LifecycleBase):
 
 EXPECTED_HOOKS = {
     "post-commit.sh", "worklog.sh", "on-commit.sh",
-    "commit-doc-check.sh", "session-end.sh", "stop.sh",
+    "session-end.sh", "stop.sh",
 }
 EXPECTED_SCRIPTS = {
     "worklog-write.sh", "notion-worklog.sh", "notion-migrate-worklogs.sh",
@@ -578,7 +578,6 @@ EXPECTED_RULES = {
 KNOWN_ENV_KEYS = {
     "WORKLOG_TIMING", "WORKLOG_DEST", "WORKLOG_GIT_TRACK",
     "WORKLOG_LANG", "AI_WORKLOG_DIR", "NOTION_DB_ID",
-    "PROJECT_DOC_CHECK_INTERVAL",
 }
 
 
@@ -682,7 +681,7 @@ class TestUninstallFull(_LifecycleBase):
 
     def test_settings_hooks_clean(self):
         cfg = self._settings(self.target)
-        WORKLOG_MARKERS = ["worklog.sh", "on-commit.sh", "commit-doc-check.sh",
+        WORKLOG_MARKERS = ["worklog.sh", "on-commit.sh",
                            "session-end.sh", "worklog-update-check.sh"]
         for event, groups in cfg.get("hooks", {}).items():
             for g in groups:
@@ -929,7 +928,7 @@ class TestUpdateCheckHookRegister(unittest.TestCase):
         os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
         os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
         # 스텁 파일 생성 (worklog-update-check.sh가 참조)
-        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh",
                    "hooks/session-end.sh", "hooks/stop.sh", "scripts/worklog-update-check.sh"]:
             path = os.path.join(self.target, f)
             with open(path, "w") as fh:
@@ -955,7 +954,6 @@ target_dir = sys.argv[2]
 HOOK_DEFS = [
     ("PostToolUse",  f"{target_dir}/hooks/worklog.sh",           5,  True,  ""),
     ("PostToolUse",  f"{target_dir}/hooks/on-commit.sh",         5,  False, "Bash"),
-    ("PostToolUse",  f"{target_dir}/hooks/commit-doc-check.sh",  5,  False, ""),
     ("SessionStart", f"{target_dir}/scripts/worklog-update-check.sh",   15,  False, ""),
     ("SessionEnd",   f"{target_dir}/hooks/session-end.sh",      15,  False, ""),
     ("Stop",         f"{target_dir}/hooks/stop.sh",             15,  False, ""),
@@ -1063,7 +1061,7 @@ class TestEnsureHookRunsWhenThrottled(unittest.TestCase):
         os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
         os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
         # 스텁 파일 생성
-        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh",
                    "hooks/session-end.sh", "hooks/stop.sh", "scripts/worklog-update-check.sh"]:
             path = os.path.join(self.target, f)
             with open(path, "w") as fh:
@@ -1125,7 +1123,6 @@ class TestEnsureHookRunsWhenThrottled(unittest.TestCase):
             "PostToolUse": [
                 {"hooks": [{"type": "command", "command": f"{self.target}/hooks/worklog.sh", "timeout": 5, "async": True}]},
                 {"hooks": [{"type": "command", "command": f"{self.target}/hooks/on-commit.sh", "timeout": 5}], "matcher": "Bash"},
-                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/commit-doc-check.sh", "timeout": 5}]},
             ],
             "SessionStart": [{"hooks": [{"type": "command", "command": f"{self.target}/scripts/worklog-update-check.sh", "timeout": 15}]}],
             "SessionEnd": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/session-end.sh", "timeout": 15}]}],
@@ -1173,7 +1170,7 @@ class TestCheckOnlySkipsThrottle(unittest.TestCase):
         self.target = os.path.join(self.tmp, ".claude")
         os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
         os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
-        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
+        for f in ["hooks/worklog.sh", "hooks/on-commit.sh",
                    "hooks/session-end.sh", "hooks/stop.sh", "scripts/worklog-update-check.sh"]:
             path = os.path.join(self.target, f)
             with open(path, "w") as fh:
@@ -1224,106 +1221,6 @@ class TestCheckOnlySkipsThrottle(unittest.TestCase):
         # 네트워크 성공이면 installed/latest/status 출력됨
         # 여기서는 GitHub API 접근 가능하므로 status 출력 기대
         self.assertIn("installed", r.stdout)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 23. worklog-update-check.sh PROJECT.md 생성 안내 (프로젝트별 1회)
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-class TestProjectMdPrompt(unittest.TestCase):
-    """프로젝트별로 PROJECT.md 없으면 한 번 안내, 플래그로 재안내 방지"""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="ai_wl_pmd_")
-        self.target = os.path.join(self.tmp, ".claude")
-        os.makedirs(os.path.join(self.target, "hooks"), exist_ok=True)
-        os.makedirs(os.path.join(self.target, "scripts"), exist_ok=True)
-        # 스텁 파일 생성
-        for f in ["hooks/worklog.sh", "hooks/on-commit.sh", "hooks/commit-doc-check.sh",
-                   "hooks/session-end.sh", "hooks/stop.sh", "scripts/worklog-update-check.sh"]:
-            path = os.path.join(self.target, f)
-            with open(path, "w") as fh:
-                fh.write("#!/bin/bash\nexit 0\n")
-            os.chmod(path, 0o755)
-        # settings.json (모든 hook 등록 상태)
-        settings_path = os.path.join(self.target, "settings.json")
-        cfg = {"env": {}, "hooks": {
-            "Stop": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/stop.sh", "timeout": 15}]}],
-            "PostToolUse": [
-                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/worklog.sh", "timeout": 5, "async": True}]},
-                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/on-commit.sh", "timeout": 5}], "matcher": "Bash"},
-                {"hooks": [{"type": "command", "command": f"{self.target}/hooks/commit-doc-check.sh", "timeout": 5}]},
-            ],
-            "SessionStart": [{"hooks": [{"type": "command", "command": f"{self.target}/scripts/worklog-update-check.sh", "timeout": 15}]}],
-            "SessionEnd": [{"hooks": [{"type": "command", "command": f"{self.target}/hooks/session-end.sh", "timeout": 15}]}],
-        }}
-        with open(settings_path, "w") as f:
-            json.dump(cfg, f, indent=2)
-        # throttle 활성 (네트워크 호출 방지)
-        import time
-        checked_file = os.path.join(self.target, ".version-checked")
-        with open(checked_file, "w") as f:
-            f.write(str(int(time.time())))
-        version_file = os.path.join(self.target, ".version")
-        with open(version_file, "w") as f:
-            f.write("abc1234")
-        # git repo 생성 (PROJECT.md 체크 대상)
-        self.workdir = os.path.join(self.tmp, "project")
-        os.makedirs(self.workdir, exist_ok=True)
-        git_env = {
-            "HOME": self.tmp,
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-            "GIT_CONFIG_NOSYSTEM": "1",
-        }
-        subprocess.run(["git", "init", self.workdir], capture_output=True, check=True, env=git_env)
-        subprocess.run(["git", "-C", self.workdir, "config", "user.email", "test@test.com"], capture_output=True, env=git_env)
-        subprocess.run(["git", "-C", self.workdir, "config", "user.name", "Test"], capture_output=True, env=git_env)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _run_update_check(self):
-        update_script = os.path.join(PACKAGE_DIR, "scripts", "worklog-update-check.sh")
-        env = {
-            "HOME": self.tmp,
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-            "TERM": "dumb",
-            "AI_WORKLOG_DIR": self.target,
-            "GIT_CONFIG_NOSYSTEM": "1",
-        }
-        return subprocess.run(
-            ["bash", update_script],
-            capture_output=True, text=True,
-            cwd=self.workdir,
-            env=env,
-            timeout=10,
-        )
-
-    def test_no_project_md_no_flag(self):
-        """git repo + PROJECT.md 없음 + 플래그 없음 → 안내 출력 + 플래그 생성"""
-        r = self._run_update_check()
-        self.assertIn("/update-project", r.stdout)
-        flag = os.path.join(self.workdir, ".claude", ".project-md-prompted")
-        self.assertTrue(os.path.exists(flag))
-
-    def test_project_md_exists(self):
-        """git repo + PROJECT.md 있음 → 안내 없음 + 플래그 미생성"""
-        with open(os.path.join(self.workdir, "PROJECT.md"), "w") as f:
-            f.write("# Project\n")
-        r = self._run_update_check()
-        self.assertNotIn("/update-project", r.stdout)
-        flag = os.path.join(self.workdir, ".claude", ".project-md-prompted")
-        self.assertFalse(os.path.exists(flag))
-
-    def test_flag_exists_no_repeat(self):
-        """git repo + PROJECT.md 없음 + 플래그 있음 → 안내 없음"""
-        flag_dir = os.path.join(self.workdir, ".claude")
-        os.makedirs(flag_dir, exist_ok=True)
-        with open(os.path.join(flag_dir, ".project-md-prompted"), "w") as f:
-            f.write("")
-        r = self._run_update_check()
-        self.assertNotIn("/update-project", r.stdout)
 
 
 if __name__ == "__main__":

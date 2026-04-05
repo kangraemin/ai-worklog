@@ -417,7 +417,6 @@ copy_file "$PACKAGE_DIR/scripts/worklog-write.sh"           "$TARGET_DIR/scripts
 install_file "$PACKAGE_DIR/hooks/worklog.sh"           "$TARGET_DIR/hooks/worklog.sh"
 install_file "$PACKAGE_DIR/hooks/session-end.sh"       "$TARGET_DIR/hooks/session-end.sh"
 copy_file    "$PACKAGE_DIR/hooks/post-commit.sh"       "$TARGET_DIR/hooks/post-commit.sh"
-copy_file    "$PACKAGE_DIR/hooks/commit-doc-check.sh"         "$TARGET_DIR/hooks/commit-doc-check.sh"
 install_file "$PACKAGE_DIR/hooks/on-commit.sh"         "$TARGET_DIR/hooks/on-commit.sh"
 install_file "$PACKAGE_DIR/hooks/stop.sh"              "$TARGET_DIR/hooks/stop.sh"
 
@@ -439,7 +438,6 @@ chmod +x "$TARGET_DIR/scripts/worklog-write.sh"
 chmod +x "$TARGET_DIR/hooks/worklog.sh"
 chmod +x "$TARGET_DIR/hooks/session-end.sh"
 chmod +x "$TARGET_DIR/hooks/post-commit.sh"
-chmod +x "$TARGET_DIR/hooks/commit-doc-check.sh"
 chmod +x "$TARGET_DIR/hooks/on-commit.sh"
 chmod +x "$TARGET_DIR/hooks/stop.sh"
 
@@ -471,7 +469,7 @@ header "$(t 'settings.json 설정' 'Updating settings.json')"
 
 SETTINGS_FILE="$TARGET_DIR/settings.json"
 
-$PYTHON - "$SETTINGS_FILE" "$TARGET_DIR" "$WORKLOG_TIMING" "$WORKLOG_DEST" "$WORKLOG_GIT_TRACK" "${NOTION_DB_ID:-}" "$WORKLOG_LANG" "$AUTO_COMMIT" "${DOC_CHECK_INTERVAL:-5}" <<'PYEOF'
+$PYTHON - "$SETTINGS_FILE" "$TARGET_DIR" "$WORKLOG_TIMING" "$WORKLOG_DEST" "$WORKLOG_GIT_TRACK" "${NOTION_DB_ID:-}" "$WORKLOG_LANG" "$AUTO_COMMIT" <<'PYEOF'
 import json, sys, os
 
 settings_file      = sys.argv[1]
@@ -482,7 +480,6 @@ git_track          = sys.argv[5]
 notion_db_id       = sys.argv[6]
 worklog_lang       = sys.argv[7]
 auto_commit        = sys.argv[8] if len(sys.argv) > 8 else 'false'
-doc_check_interval = sys.argv[9] if len(sys.argv) > 9 else '5'
 
 # 기존 설정 읽기
 cfg = {}
@@ -499,7 +496,6 @@ env['WORKLOG_LANG']      = worklog_lang
 env['AI_WORKLOG_DIR']    = target_dir
 if notion_db_id:
     env['NOTION_DB_ID'] = notion_db_id
-env['PROJECT_DOC_CHECK_INTERVAL'] = doc_check_interval
 
 # ── hooks 머지 ──
 hooks = cfg.setdefault('hooks', {})
@@ -508,7 +504,6 @@ hooks = cfg.setdefault('hooks', {})
 hook_defs = [
     ('PostToolUse',  f'{target_dir}/hooks/worklog.sh',           5,  True,  None),
     ('PostToolUse',  f'{target_dir}/hooks/on-commit.sh',         5,  False, 'Bash'),
-    ('PostToolUse',  f'{target_dir}/hooks/commit-doc-check.sh',  5,  False, None),
     ('SessionStart', f'{target_dir}/scripts/worklog-update-check.sh',    15, False, None),
     ('SessionEnd',   f'{target_dir}/hooks/session-end.sh',       15, False, None),
     ('Stop',         f'{target_dir}/hooks/stop.sh',              15, False, None),

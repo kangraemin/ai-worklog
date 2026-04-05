@@ -31,7 +31,6 @@ EXPECTED_FILES = [
     "hooks/on-commit.sh",
     "hooks/session-end.sh",
     "hooks/post-commit.sh",
-    "hooks/commit-doc-check.sh",
     "hooks/stop.sh",
     "git-hooks/post-commit",
     "commands/worklog.md",
@@ -42,7 +41,7 @@ EXPECTED_FILES = [
 ]
 
 # 5개 hook 확인 대상
-HOOK_FILES = ["worklog.sh", "on-commit.sh", "commit-doc-check.sh", "worklog-update-check.sh", "session-end.sh", "stop.sh"]
+HOOK_FILES = ["worklog.sh", "on-commit.sh", "worklog-update-check.sh", "session-end.sh", "stop.sh"]
 
 
 def _write_stub(path: str, content: str = "#!/bin/bash\necho stub\n") -> None:
@@ -66,7 +65,6 @@ def _default_hooks(target_dir: str) -> dict:
         "PostToolUse": [
             {"hooks": [{"type": "command", "command": f"{target_dir}/hooks/worklog.sh", "timeout": 5, "async": True}]},
             {"hooks": [{"type": "command", "command": f"{target_dir}/hooks/on-commit.sh", "timeout": 5}], "matcher": "Bash"},
-            {"hooks": [{"type": "command", "command": f"{target_dir}/hooks/commit-doc-check.sh", "timeout": 5}]},
         ],
         "SessionStart": [
             {"hooks": [{"type": "command", "command": f"{target_dir}/scripts/worklog-update-check.sh", "timeout": 15}]},
@@ -87,7 +85,6 @@ def _default_env(target_dir: str, dest: str = "notion-only") -> dict:
         "WORKLOG_GIT_TRACK": "false" if dest == "notion-only" else "true",
         "WORKLOG_LANG": "ko",
         "AI_WORKLOG_DIR": target_dir,
-        "PROJECT_DOC_CHECK_INTERVAL": "5",
     }
     if dest != "git":
         env["NOTION_DB_ID"] = "fake-db-id-123"
@@ -230,8 +227,8 @@ class TestHealthyNotionOnly(_Base):
         self._setup_full("notion-only")
         r = self._run_healthcheck()
         self.assertEqual(r["status"], "pass")
-        self.assertEqual(r["files_found"], 17)
-        self.assertEqual(r["hooks_found"], 6)
+        self.assertEqual(r["files_found"], 16)
+        self.assertEqual(r["hooks_found"], 5)
         self.assertEqual(r["git_hook"], "ok")
         self.assertEqual(r["env"], "ok")
         self.assertEqual(r["issue_count"], 0)
@@ -364,7 +361,7 @@ class TestMissingWorklogHook(_Base):
         self._setup_full()
         self._remove_hook("worklog.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 5)
+        self.assertEqual(r["hooks_found"], 4)
         self.assertIn("worklog.sh", r["hooks_missing"])
 
 
@@ -375,7 +372,7 @@ class TestMissingOnCommitHook(_Base):
         self._setup_full()
         self._remove_hook("on-commit.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 5)
+        self.assertEqual(r["hooks_found"], 4)
         self.assertIn("on-commit.sh", r["hooks_missing"])
 
 
@@ -386,7 +383,7 @@ class TestMissingSessionEndHook(_Base):
         self._setup_full()
         self._remove_hook("session-end.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 5)
+        self.assertEqual(r["hooks_found"], 4)
         self.assertIn("session-end.sh", r["hooks_missing"])
 
 
@@ -397,19 +394,8 @@ class TestMissingUpdateCheckHook(_Base):
         self._setup_full()
         self._remove_hook("worklog-update-check.sh")
         r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 5)
+        self.assertEqual(r["hooks_found"], 4)
         self.assertIn("worklog-update-check.sh", r["hooks_missing"])
-
-
-class TestMissingCommitDocCheckHook(_Base):
-    """TC-16: commit-doc-check.sh hook만 제거"""
-
-    def test_hook_missing(self):
-        self._setup_full()
-        self._remove_hook("commit-doc-check.sh")
-        r = self._run_healthcheck()
-        self.assertEqual(r["hooks_found"], 5)
-        self.assertIn("commit-doc-check.sh", r["hooks_missing"])
 
 
 class TestMissingPostToolUseAll(_Base):
@@ -443,8 +429,8 @@ class TestHookRegisteredButFileMissing(_Base):
         self._setup_full()
         os.remove(os.path.join(self.target, "hooks/worklog.sh"))
         r = self._run_healthcheck()
-        # hook은 settings.json에 등록돼있으므로 hooks_found는 5
-        self.assertEqual(r["hooks_found"], 6)
+        # hook은 settings.json에 등록돼있으므로 hooks_found는 변하지 않음
+        self.assertEqual(r["hooks_found"], 5)
         # 하지만 파일 누락 경고
         self.assertIn("worklog.sh", r.get("hooks_file_missing", []))
 

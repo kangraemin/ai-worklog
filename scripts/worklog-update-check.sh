@@ -57,22 +57,9 @@ print('added')
 SETTINGS="$HOME/.claude/settings.json"
 _ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/worklog.sh"           5  true  ""     || true
 _ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/on-commit.sh"         5  false "Bash" || true
-_ensure_hook "$SETTINGS" "PostToolUse"  "$AI_WORKLOG_DIR/hooks/commit-doc-check.sh"  5  false ""     || true
 _ensure_hook "$SETTINGS" "SessionStart" "$AI_WORKLOG_DIR/scripts/worklog-update-check.sh"   15  false ""     || true
 _ensure_hook "$SETTINGS" "SessionEnd"   "$AI_WORKLOG_DIR/hooks/session-end.sh"      15  false ""     || true
 _ensure_hook "$SETTINGS" "Stop"         "$AI_WORKLOG_DIR/hooks/stop.sh"             15  false ""     || true
-
-# ── PROJECT.md 생성 안내 (프로젝트별 1회) ────────────────────────────────────
-if git rev-parse --is-inside-work-tree &>/dev/null; then
-  _PROJ_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-  _PROMPTED="$_PROJ_ROOT/.claude/.project-md-prompted"
-  if [ ! -f "$_PROJ_ROOT/PROJECT.md" ] && [ ! -f "$_PROMPTED" ]; then
-    mkdir -p "$_PROJ_ROOT/.claude"
-    touch "$_PROMPTED"
-    printf 'PROJECT.md가 없습니다. /update-project 를 실행하면 프로젝트 문서가 자동 생성됩니다. 사용자에게 실행할지 물어보세요.\n'
-    exit 0
-  fi
-fi
 
 # ── 24시간 throttle ───────────────────────────────────────────────────────────
 if [ "$FORCE" = false ] && [ "$CHECK_ONLY" = false ] && [ -f "$CHECKED_FILE" ]; then

@@ -60,7 +60,6 @@ WORKLOG_FILES=(
   "hooks/post-commit.sh"
   "hooks/worklog.sh"
   "hooks/on-commit.sh"
-  "hooks/commit-doc-check.sh"
   "hooks/session-end.sh"
   "hooks/stop.sh"
   # commands
@@ -131,7 +130,7 @@ except Exception:
 
 # hooks 제거: worklog 관련 command 패턴
 WORKLOG_MARKERS = [
-    'worklog.sh', 'on-commit.sh', 'commit-doc-check.sh',
+    'worklog.sh', 'on-commit.sh',
     'session-end.sh', 'stop.sh', 'worklog-update-check.sh', 'post-commit.sh'
 ]
 
@@ -158,8 +157,7 @@ print("  ✓ worklog hooks removed")
 # env 제거
 WORKLOG_ENV_KEYS = [
     'WORKLOG_TIMING', 'WORKLOG_DEST', 'WORKLOG_GIT_TRACK',
-    'WORKLOG_LANG', 'AI_WORKLOG_DIR', 'NOTION_DB_ID',
-    'PROJECT_DOC_CHECK_INTERVAL'
+    'WORKLOG_LANG', 'AI_WORKLOG_DIR', 'NOTION_DB_ID'
 ]
 
 env = cfg.get('env', {})

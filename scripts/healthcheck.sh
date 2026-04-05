@@ -90,7 +90,6 @@ EXPECTED_FILES=(
   "hooks/on-commit.sh"
   "hooks/session-end.sh"
   "hooks/post-commit.sh"
-  "hooks/commit-doc-check.sh"
   "hooks/stop.sh"
   "git-hooks/post-commit"
   "commands/worklog.md"
@@ -124,7 +123,6 @@ fi
 HOOK_CHECKS=(
   "worklog.sh:PostToolUse:"
   "on-commit.sh:PostToolUse:Bash"
-  "commit-doc-check.sh:PostToolUse:"
   "worklog-update-check.sh:SessionStart:"
   "session-end.sh:SessionEnd:"
   "stop.sh:Stop:"

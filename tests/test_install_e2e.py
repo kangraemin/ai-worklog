@@ -36,7 +36,6 @@ EXPECTED_FILES = [
     "hooks/session-end.sh",
     "hooks/post-commit.sh",
     "hooks/on-commit.sh",
-    "hooks/commit-doc-check.sh",
     "commands/worklog.md",
     "commands/worklog-migrate.md",
     "commands/worklog-config.md",
@@ -53,7 +52,6 @@ EXPECTED_EXEC = [
     "hooks/session-end.sh",
     "hooks/post-commit.sh",
     "hooks/on-commit.sh",
-    "hooks/commit-doc-check.sh",
 ]
 
 
@@ -837,12 +835,6 @@ class TestOnCommitHookInstall(_Base):
         self.assertIsNotNone(h)
         self.assertFalse(h.get("async", False))
 
-    def test_commit_doc_check_registered(self):
-        """commit-doc-check.sh도 PostToolUse에 등록됨"""
-        cfg = self._installed_cfg(["1", "1", "3", "1", "1"])
-        found = self._find_hook(cfg, "PostToolUse", "commit-doc-check.sh")
-        self.assertIsNotNone(found, "commit-doc-check.sh not found in PostToolUse")
-
     def test_stop_hook_registered(self):
         """Stop hook에 stop.sh 등록 확인"""
         cfg = self._installed_cfg(["1", "1", "3", "1", "1"])
@@ -1027,8 +1019,7 @@ class TestUninstall(_Base):
         cfg = self._settings()
         env = cfg.get("env", {})
         for key in ["WORKLOG_TIMING", "WORKLOG_DEST", "WORKLOG_GIT_TRACK",
-                     "WORKLOG_LANG", "AI_WORKLOG_DIR", "NOTION_DB_ID",
-                     "PROJECT_DOC_CHECK_INTERVAL"]:
+                     "WORKLOG_LANG", "AI_WORKLOG_DIR", "NOTION_DB_ID"]:
             self.assertNotIn(key, env, f"{key} should be removed")
 
     def test_files_deleted_or_cleaned(self):
@@ -1260,23 +1251,6 @@ class TestNonGitLocalGitIgnore(_Base):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 23. argv 인덱싱 수정 검증
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-class TestArgvIndexing(_Base):
-    """PROJECT_DOC_CHECK_INTERVAL이 숫자로 설정되는지"""
-
-    def test_doc_check_interval_is_number(self):
-        """PROJECT_DOC_CHECK_INTERVAL이 'false'가 아닌 숫자"""
-        self._run(["1", "1", "3", "1", "1"])
-        cfg = self._settings()
-        val = cfg.get("env", {}).get("PROJECT_DOC_CHECK_INTERVAL", "")
-        self.assertNotEqual(val, "false", "should not be 'false' (argv bug)")
-        self.assertTrue(val.isdigit(), f"should be a number, got: {val}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # 24. timing 값 검증
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1331,10 +1305,10 @@ class TestSummaryOutput(_Base):
     """설치 완료 요약 출력 정확성"""
 
     def test_hooks_summary_correct(self):
-        """Hooks 요약에 PostToolUse (3), SessionStart, SessionEnd"""
+        """Hooks 요약에 PostToolUse (2), SessionStart, SessionEnd"""
         r = self._run(["1", "1", "3", "1", "1"])
         out = r.stdout
-        self.assertIn("PostToolUse (3)", out)
+        self.assertIn("PostToolUse (2)", out)
         self.assertIn("SessionStart", out)
         self.assertIn("SessionEnd", out)
 
