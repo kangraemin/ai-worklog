@@ -13,8 +13,10 @@ description: "워크로그(작업 기록) 작성. '작업 기록해줘', '오늘
 ## 환경변수 유효성 검사
 
 - `WORKLOG_DEST`가 `notion` 또는 `notion-only`이면:
-  - `NOTION_TOKEN` 없으면: "⚠ NOTION_TOKEN 환경변수가 필요합니다. git 모드로 fallback합니다." 출력, `git` 모드로 진행
-  - `NOTION_DB_ID` 없으면: "⚠ NOTION_DB_ID 환경변수가 필요합니다. git 모드로 fallback합니다." 출력, `git` 모드로 진행
+  - `NOTION_TOKEN`을 확인: 현재 환경변수 **또는** `~/.claude/.env` 파일에 `NOTION_TOKEN`이 정의되어 있으면 OK (notion-worklog.sh가 .env를 자체 source함)
+    - 둘 다 없으면: "⚠ NOTION_TOKEN 환경변수가 필요합니다. git 모드로 fallback합니다." 출력, `git` 모드로 진행
+  - `NOTION_DB_ID`를 확인: 현재 환경변수 **또는** `~/.claude/.env` 파일에 `NOTION_DB_ID`가 정의되어 있으면 OK
+    - 둘 다 없으면: "⚠ NOTION_DB_ID 환경변수가 필요합니다. git 모드로 fallback합니다." 출력, `git` 모드로 진행
 
 ## 플로우
 
